@@ -124,6 +124,5 @@ class TestTypesAtModuleScopeDontNeedImportHooks(unittest2.TestCase):
     def test_can_pickle(self):
         import pickle
         lily = Cat(fur='tabby')
-        print 'debug', Cat.__module__
         lily = pickle.loads(pickle.dumps(lily))
         self.assertEqual(lily.fur, 'tabby')
