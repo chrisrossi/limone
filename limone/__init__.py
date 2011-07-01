@@ -1,30 +1,69 @@
 import colander
+import sys
+
+default = object()
 
 
-def content_type(schema):
-    """
-    Decorator for turning a class into a content type using the passed in
-    Colander schema.
-    """
-    def decorator(cls):
-        return make_content_type(schema, cls, cls.__name__)
-    return decorator
+class Limone(object):
+    module = None
 
+    def __init__(self):
+        self._types = {}
 
-def make_content_type(schema, base=object, name=None):
-    """
-    Generate a content type class from a Colander schema.
-    """
-    if isinstance(schema, type):
-        schema = schema()
+    def content_type(self, schema):
+        """
+        Decorator for turning a class into a content type using the passed in
+        Colander schema.
+        """
+        def decorator(cls):
+            module = self.module
+            if module is None:
+                module = cls.__module__
+            return self.add_content_type(cls.__name__, schema, module, (cls,))
+        return decorator
 
-    if type(getattr(schema, 'typ', None)) != colander.Mapping:
-        raise TypeError('Schema must be a colander mapping schema.')
+    def content_schema(self, schema):
+        """
+        Decorator for turning a Colander schema into a content type.
+        """
+        module = self.module
+        if module is None:
+            module = schema.__module__
+        return self.add_content_type(schema.__name__, schema, module)
 
-    schema = schema.clone() # protect us from outside mutation
-    content_type = _content_type_factory(schema, base, name)
+    def add_content_type(self, name, schema, module=None, bases=(object,)):
+        """
+        Generate a content type class from a Colander schema.
+        """
+        if module is None:
+            module = self.module
+        content_type = _content_type_factory(module, name, schema, bases)
+        self._types[name] = content_type
+        return content_type
 
-    return content_type
+    def get_content_type(self, name):
+        return self._types.get(name)
+
+    __getattr__ = get_content_type
+
+    def hook_import(self, module='__limone__'):
+        self.module = module
+        sys.meta_path.append(self)
+
+    def unhook_import(self):
+        sys.meta_path.remove(self)
+        module = self.module
+        if module in sys.modules:
+            del sys.modules[module]
+        del self.module
+
+    def find_module(self, module, package_path):
+        if module == self.module:
+            return self
+
+    def load_module(self, module):
+        sys.modules[module] = self
+        return self
 
 
 class _LeafNodeProperty(object):
@@ -53,14 +92,35 @@ def _make_property(node):
     return _LeafNodeProperty(node)
 
 
-def _content_type_factory(node, base=object, name=None):
+def _appstruct_node(node, value):
+    return value
 
-    class ContentType(base):
-        _schema_node = node
+
+def _content_type_factory(module, name, schema, bases):
+    """
+    Generate a content type class from a Colander schema.
+    """
+    if isinstance(schema, type):
+        schema = schema()
+
+    if type(getattr(schema, 'typ', None)) != colander.Mapping:
+        raise TypeError('Schema must be a colander mapping schema.')
+
+    class MetaType(type):
+        def __new__(cls, throw, away, members):
+            return type.__new__(cls, name, bases, members)
+
+        def __init__(cls, throw, away, members):
+            type.__init__(cls, name, bases, members)
+            cls.__module__ = module
+
+    class ContentType(object):
+        __metaclass__ = MetaType
+        __schema__ = schema
 
         @classmethod
         def deserialize(cls, cstruct):
-            appstruct = cls._schema_node.deserialize(cstruct)
+            appstruct = cls.__schema__.deserialize(cstruct)
             return cls(**appstruct)
 
         def __init__(self, **kw):
@@ -72,7 +132,7 @@ def _content_type_factory(node, base=object, name=None):
 
         def deserialize_update(self, cstruct):
             error = None
-            schema = self._schema_node
+            schema = self.__schema__
             appstruct = {}
             for i, (name, value) in enumerate(cstruct.items()):
                 node = schema[name]
@@ -85,10 +145,13 @@ def _content_type_factory(node, base=object, name=None):
 
             self._update_from_dict(appstruct, skip_missing=True)
 
+        def serialize(self):
+            return self.__schema__.serialize(self._appstruct())
+
         def _update_from_dict(self, data, skip_missing):
             error = None
 
-            for i, node in enumerate(self._schema_node.children):
+            for i, node in enumerate(self.__schema__.children):
                 name = node.name
                 try:
                     setattr(self, name, data.pop(name, colander.null))
@@ -104,22 +167,12 @@ def _content_type_factory(node, base=object, name=None):
 
         def _appstruct(self):
             data = {}
-            for child in self._schema_node.children:
+            for child in self.__schema__.children:
                 name = child.name
                 data[name] = _appstruct_node(child, getattr(self, name))
             return data
 
-        def serialize(self):
-            return self._schema_node.serialize(self._appstruct())
-
-    if name is not None:
-        ContentType.__name__ = name
-
-    for child in node.children:
+    for child in schema.children:
         setattr(ContentType, child.name, _make_property(child))
 
     return ContentType
-
-
-def _appstruct_node(node, value):
-    return value
