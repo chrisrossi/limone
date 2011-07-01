@@ -121,6 +121,10 @@ class Cat(colander.Schema):
 
 class TestTypesAtModuleScopeDontNeedImportHooks(unittest2.TestCase):
 
+    def test_module_and_name_are_correct(self):
+        self.assertEqual(Cat.__module__, 'limone.tests')
+        self.assertEqual(Cat.__name__, 'Cat')
+
     def test_can_pickle(self):
         import pickle
         lily = Cat(fur='tabby')
