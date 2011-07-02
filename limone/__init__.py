@@ -48,15 +48,11 @@ class Limone(object):
     __getattr__ = get_content_type
 
     def hook_import(self, module='__limone__'):
-        self._finder_loader = helper = _FinderLoader(self, module)
+        self._finder_loader =  _FinderLoader(self, module)
         self.module = module
-        sys.meta_path.append(helper)
 
     def unhook_import(self):
-        sys.meta_path.remove(self._finder_loader)
-        module = self.module
-        if module in sys.modules:
-            del sys.modules[module]
+        self._finder_loader.unload()
         del self.module
         del self._finder_loader
 
@@ -177,6 +173,7 @@ class _FinderLoader(object):
     def __init__(self, limone, module):
         self.limone = limone
         self.module = module
+        sys.meta_path.append(self)
 
     def find_module(self, module, package_path):
         if module == self.module:
@@ -184,5 +181,15 @@ class _FinderLoader(object):
 
     def load_module(self, module):
         limone = self.limone
-        sys.modules[module] = limone
+        sys.modules[module] = self
         return limone
+
+    def __getattr__(self, name):
+        return self.limone.get_content_type(name)
+
+    def unload(self):
+        sys.meta_path.remove(self)
+        module = self.module
+        if module in sys.modules:
+            del sys.modules[module]
+        del self.limone

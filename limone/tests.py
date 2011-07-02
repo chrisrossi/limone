@@ -44,7 +44,7 @@ class ShallowSchemaTests(unittest2.TestCase):
 
         __import__('__limone__')
         module = sys.modules['__limone__']
-        self.assertIsInstance(module, limone.Limone)
+        self.assertIsInstance(module.limone, limone.Limone)
         self.assertEqual(module.Person, self.content_type)
 
     def test_constructor(self):
