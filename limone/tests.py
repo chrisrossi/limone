@@ -102,13 +102,18 @@ class ShallowSchemaTests(unittest2.TestCase):
         self.assertEqual(joe.name, 'Gio')
         self.assertEqual(joe.age, 40)
 
-    def test_can_pickle(self):
+    def test_can_pickle_instance(self):
         import pickle
         joe = self.content_type(name='Joe', age=35)
         new_joe = pickle.loads(pickle.dumps(joe))
         self.assertEqual(new_joe.name, 'Joe')
         self.assertEqual(new_joe.age, 35)
         self.assertIsInstance(new_joe, self.content_type)
+
+    def test_can_pickle_type(self):
+        import pickle
+        ct = pickle.loads(pickle.dumps(self.content_type))
+        self.assertEqual(ct.__schema__.children[0].name, 'name')
 
 
 import colander
@@ -125,8 +130,13 @@ class TestTypesAtModuleScopeDontNeedImportHooks(unittest2.TestCase):
         self.assertEqual(Cat.__module__, 'limone.tests')
         self.assertEqual(Cat.__name__, 'Cat')
 
-    def test_can_pickle(self):
+    def test_can_pickle_instance(self):
         import pickle
         lily = Cat(fur='tabby')
         lily = pickle.loads(pickle.dumps(lily))
         self.assertEqual(lily.fur, 'tabby')
+
+    def test_can_pickle_type(self):
+        import pickle
+        ct = pickle.loads(pickle.dumps(Cat))
+        self.assertEqual(ct.__schema__.children[0].name, 'fur')
