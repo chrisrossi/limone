@@ -6,6 +6,7 @@ default = object()
 
 class Limone(object):
     module = None
+    _finder_loader = None
 
     def __init__(self):
         self._types = {}
@@ -47,23 +48,17 @@ class Limone(object):
     __getattr__ = get_content_type
 
     def hook_import(self, module='__limone__'):
+        self._finder_loader = helper = _FinderLoader(self, module)
         self.module = module
-        sys.meta_path.append(self)
+        sys.meta_path.append(helper)
 
     def unhook_import(self):
-        sys.meta_path.remove(self)
+        sys.meta_path.remove(self._finder_loader)
         module = self.module
         if module in sys.modules:
             del sys.modules[module]
         del self.module
-
-    def find_module(self, module, package_path):
-        if module == self.module:
-            return self
-
-    def load_module(self, module):
-        sys.modules[module] = self
-        return self
+        del self._finder_loader
 
 
 class _LeafNodeProperty(object):
@@ -176,3 +171,18 @@ def _content_type_factory(module, name, schema, bases):
         setattr(ContentType, child.name, _make_property(child))
 
     return ContentType
+
+
+class _FinderLoader(object):
+    def __init__(self, limone, module):
+        self.limone = limone
+        self.module = module
+
+    def find_module(self, module, package_path):
+        if module == self.module:
+            return self
+
+    def load_module(self, module):
+        limone = self.limone
+        sys.modules[module] = limone
+        return limone
