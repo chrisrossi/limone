@@ -166,9 +166,8 @@ class _LeafNodeProperty(object):
 
 class _MappingNodeProperty(_LeafNodeProperty):
 
-    def __set__(self, obj, appstruct):
-        obj.__dict__[self._attr] = _MappingNode(self.node, appstruct)
-        return appstruct
+    def _validate(self, value):
+        return _MappingNode(self.node, value)
 
 
 class _MappingNode(object):
@@ -217,9 +216,8 @@ class _MappingNode(object):
 
 class _SequenceNodeProperty(_LeafNodeProperty):
 
-    def __set__(self, obj, appstruct):
-        obj.__dict__[self._attr] = _SequenceNode(self.node, appstruct)
-        return appstruct
+    def _validate(self, value):
+        return _SequenceNode(self.node, value)
 
 
 class _SequenceNode(object):
