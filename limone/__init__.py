@@ -129,14 +129,11 @@ def _content_type_factory(module, name, schema, bases):
             return data
 
         def _appstruct(self):
-            data = {}
-            for child in self.__schema__.children:
-                name = child.name
-                data[name] = _appstruct_node(child, getattr(self, name))
-            return data
+            return [(node.name, _appstruct_node(getattr(self, node.name)))
+                    for node in self.__schema__]
 
-    for child in schema.children:
-        setattr(ContentType, child.name, _make_property(child))
+    for node in schema:
+        setattr(ContentType, node.name, _make_property(node))
 
     return ContentType
 
@@ -177,9 +174,9 @@ class _MappingNode(object):
         props = {}
         error = None
         data = appstruct.copy()
-        for i, child in enumerate(schema):
-            name = child.name
-            props[name] = prop = _make_property(child)
+        for i, node in enumerate(schema):
+            name = node.name
+            props[name] = prop = _make_property(node)
             try:
                 prop.__set__(self, data.pop(name, colander.null))
             except colander.Invalid, e:
@@ -209,9 +206,9 @@ class _MappingNode(object):
             return super(_MappingNode, self).__setattr__(name, value)
         return prop.__set__(self, value)
 
-    def __iter__(self):
-        for name, prop in self._props.items():
-            yield name, _appstruct_node(prop.node, prop.__get__(self))
+    def _appstruct(self):
+        return [(name, _appstruct_node(prop.__get__(self))) for
+                name, prop in self._props.items()]
 
 
 class _SequenceNodeProperty(_LeafNodeProperty):
@@ -376,7 +373,10 @@ def _make_property(node):
     return _LeafNodeProperty(node)
 
 
-def _appstruct_node(node, value):
+def _appstruct_node(value):
+    get_appstruct = getattr(value, '_appstruct', None)
+    if get_appstruct is not None:
+        return get_appstruct()
     return value
 
 
