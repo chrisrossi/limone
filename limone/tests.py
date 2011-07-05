@@ -431,6 +431,58 @@ class NestedSequenceNodeTests(unittest2.TestCase):
         self.assertTrue(2 in plane.coords[0])
 
 
+class TupleNodeTests(unittest2.TestCase):
+
+    def setUp(self):
+        import colander
+        from limone import Limone
+
+        limone = Limone()
+
+        class Numbers(colander.SequenceSchema):
+            numbers = colander.SchemaNode(colander.Int())
+
+        class DataStream(colander.TupleSchema):
+            foo = Numbers()
+            bar = colander.SchemaNode(colander.Str('UTF-8'))
+
+        @limone.content_schema
+        class Something(colander.Schema):
+            name = colander.SchemaNode(colander.Str('UTF_8'), default='Bill')
+            stream = DataStream()
+
+        self.content_type = Something
+
+    def test_construction(self):
+        thing = self.content_type(stream=([1, 2, 3], 'abc'))
+        self.assertEqual(thing.stream, ([1, 2, 3], 'abc'))
+
+    def test_construction_invalid(self):
+        import colander
+        with self.assertRaises(colander.Invalid) as ecm:
+            self.content_type(stream=(1, 'abc'))
+        self.assertEqual(ecm.exception.asdict(), {
+            'stream.0': u'"1" is not iterable'})
+
+    def test_validation(self):
+        import colander
+        thing = self.content_type(stream=([1, 2, 3], 'abc'))
+        with self.assertRaises(colander.Invalid) as ecm:
+            thing.stream = (['one', 'two'], 'abc')
+        self.assertEqual(ecm.exception.asdict(), {
+            'stream.0.0': u'"one" is not a number',
+            'stream.0.1': u'"two" is not a number'})
+        with self.assertRaises(colander.Invalid) as ecm:
+            thing.stream = ('foo', 'abc')
+        self.assertEqual(ecm.exception.asdict(), {
+            'stream.0': u'"foo" is not iterable'})
+        with self.assertRaises(colander.Invalid) as ecm:
+            thing.stream = 1
+        self.assertEqual(ecm.exception.asdict(), {
+            'stream': u'"1" is not iterable'})
+
+
+
 import colander
 from limone import Limone as Limone
 limone = Limone()

@@ -342,12 +342,39 @@ class _SequenceItem(object):
         return self._prop.__set__(self, value)
 
 
+class _TupleNodeProperty(_LeafNodeProperty):
+
+    def __init__(self, node):
+        super(_TupleNodeProperty, self).__init__(node)
+        self._props = tuple(_make_property(child) for child in node)
+
+    def _validate(self, value):
+        node = self.node
+        node.typ._validate(node, value) # XXX private colander api
+        items = []
+        error = None
+        for i, (item, prop) in enumerate(zip(value, self._props)):
+            try:
+                items.append(_SequenceItem(prop, item))
+            except colander.Invalid, e:
+                if error is None:
+                    error = colander.Invalid(node)
+                error.add(e, i)
+
+        if error is not None:
+            raise error
+
+        return tuple(item.get() for item in items)
+
+
 def _make_property(node):
     type = node.typ
     if isinstance(type, colander.Mapping):
         return _MappingNodeProperty(node)
     if isinstance(type, colander.Sequence):
         return _SequenceNodeProperty(node)
+    if isinstance(type, colander.Tuple):
+        return _TupleNodeProperty(node)
     return _LeafNodeProperty(node)
 
 
