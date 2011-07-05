@@ -52,6 +52,13 @@ class ShallowSchemaTests(unittest2.TestCase):
         self.assertEqual(joe.name, 'Joe')
         self.assertEqual(joe.age, 35)
 
+    def test_constructor_invalid(self):
+        import colander
+        with self.assertRaises(colander.Invalid) as ecm:
+            joe = self.content_type(age='thirty five')
+        self.assertEqual(ecm.exception.asdict(), {
+            'age': u'"thirty five" is not a number', 'name': u'Required'})
+
     def test_getset(self):
         joe = self.content_type(name='Joe', age=35)
         joe.name = 'Chris'
@@ -65,7 +72,7 @@ class ShallowSchemaTests(unittest2.TestCase):
             joe = self.content_type()
 
         self.assertEqual(ecm.exception.asdict(), {
-            'name.age': u'Required', 'name.name': u'Required'})
+            'age': u'Required', 'name': u'Required'})
 
     def test_missing_fields_w_defaults(self):
         self.schema = schema = self.schema()
@@ -102,6 +109,14 @@ class ShallowSchemaTests(unittest2.TestCase):
         self.assertEqual(joe.name, 'Gio')
         self.assertEqual(joe.age, 40)
 
+    def test_deserialize_update_invalid(self):
+        import colander
+        joe = self.content_type(name='Joe', age=35)
+        with self.assertRaises(colander.Invalid) as ecm:
+            joe.deserialize_update({'age': 'forty', 'name': None})
+        self.assertEqual(ecm.exception.asdict(), {
+            'age': u'"forty" is not a number', 'name': u'Required'})
+
     def test_can_pickle_instance(self):
         import pickle
         joe = self.content_type(name='Joe', age=35)
@@ -114,6 +129,131 @@ class ShallowSchemaTests(unittest2.TestCase):
         import pickle
         ct = pickle.loads(pickle.dumps(self.content_type))
         self.assertEqual(ct.__schema__.children[0].name, 'name')
+
+
+class NestedMappingNodeTests(unittest2.TestCase):
+
+    def setUp(self):
+        import colander
+        from limone import Limone
+
+        limone = Limone()
+
+        class NSAData(colander.Schema):
+            serialnum = colander.SchemaNode(colander.Str('UTF-8'))
+            date_of_contact = colander.SchemaNode(colander.Date())
+
+        class PersonalData(colander.Schema):
+            nsa_data = NSAData()
+            n_arrests = colander.SchemaNode(colander.Int())
+
+        class PersonSchema(colander.Schema):
+            name = colander.SchemaNode(colander.Str('UTF-8'))
+            age = colander.SchemaNode(colander.Integer(), default=500)
+            personal = PersonalData()
+
+        self.content_type = limone.add_content_type('Person', PersonSchema)
+
+    def test_construction(self):
+        import datetime
+        day = datetime.date(2010, 5, 12)
+        jack = self.content_type(**{
+            'name': 'Jack',
+            'age': 500,
+            'personal': {
+                'nsa_data': {
+                    'serialnum': 'abc123',
+                    'date_of_contact': day,
+                },
+                'n_arrests': 5,
+            },
+        })
+        self.assertEqual(jack.name, 'Jack')
+        self.assertEqual(jack.age, 500)
+        self.assertEqual(jack.personal.nsa_data.serialnum, 'abc123')
+        self.assertEqual(jack.personal.nsa_data.date_of_contact, day)
+        self.assertEqual(jack.personal.n_arrests, 5)
+        return jack
+
+    def test_assignment(self):
+        import datetime
+        today = datetime.date.today()
+        jack = self.test_construction()
+        jack.personal.nsa_data.date_of_contact = today
+        self.assertEqual(jack.personal.nsa_data.date_of_contact, today)
+
+    def test_assignment_of_appdata(self):
+        import datetime
+        today = datetime.date.today()
+        jack = self.test_construction()
+        jack.personal.nsa_data = {
+            'serialnum': 'def456', 'date_of_contact': today}
+        self.assertEqual(jack.personal.nsa_data.serialnum, 'def456')
+        self.assertEqual(jack.personal.nsa_data.date_of_contact, today)
+
+    def test_assignment_of_appdata_extra_params(self):
+        import colander
+        import datetime
+        today = datetime.date.today()
+        jack = self.test_construction()
+        with self.assertRaises(TypeError):
+            jack.personal.nsa_data = {
+                'serialnum': 'def456', 'date_of_contact': today, 'foo': 'bar'}
+
+    def test_validation(self):
+        import colander
+        jack = self.test_construction()
+        with self.assertRaises(colander.Invalid):
+            jack.personal.nsa_data.date_of_contact = 'Christmas'
+
+    def test_assignment_of_appdata_validation(self):
+        jack = self.test_construction()
+        with self.assertRaises(colander.Invalid) as ecm:
+            jack.personal.nsa_data = {'date_of_contact': 'Christmas'}
+        self.assertEqual(ecm.exception.asdict(), {
+            'nsa_data.date_of_contact': u'"Christmas" is not a date object',
+            'nsa_data.serialnum': u'Required'})
+
+    def test_non_schema_attributes(self):
+        jack = self.test_construction()
+        with self.assertRaises(AttributeError):
+            foo = jack.personal.phone_number
+        jack.personal.phone_number = '555-1212'
+        self.assertEqual(jack.personal.phone_number, '555-1212')
+
+    def test_serialize(self):
+        jack = self.test_construction()
+        self.assertEquals(jack.serialize(), {
+            'name': 'Jack',
+            'age': '500',
+            'personal': {
+                'nsa_data': {
+                    'serialnum': 'abc123',
+                    'date_of_contact': '2010-05-12',
+                },
+                'n_arrests': '5',
+            },
+        })
+
+    def test_deserialize(self):
+        from datetime import date
+        jonas = self.content_type.deserialize({
+            'name': 'Jonas',
+            'age': '50',
+            'personal': {
+                'nsa_data': {
+                    'serialnum': 'a1',
+                    'date_of_contact': '2011-05-12',
+                },
+                'n_arrests': '6',
+            },
+        })
+        self.assertEqual(jonas.name, 'Jonas')
+        self.assertEqual(jonas.age, 50)
+        self.assertEqual(jonas.personal.nsa_data.serialnum, 'a1')
+        self.assertEqual(jonas.personal.nsa_data.date_of_contact,
+                         date(2011, 5, 12))
+        self.assertEqual(jonas.personal.n_arrests, 6)
 
 
 import colander

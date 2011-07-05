@@ -55,36 +55,6 @@ class Limone(object):
         del self._finder_loader
 
 
-class _LeafNodeProperty(object):
-
-    def __init__(self, node):
-        self.node = node
-        name = node.name
-        assert name
-        self._attr = '.' + name
-
-    def __get__(self, obj, cls):
-        return obj.__dict__[self._attr]
-
-    def __set__(self, obj, value):
-        value = self._validate(value)
-        obj.__dict__[self._attr] = value
-
-    def _validate(self, value):
-        # serialize/deserialize forces colander to validate
-        # also will replace null values with defaults
-        node = self.node
-        return node.deserialize(node.serialize(value))
-
-
-def _make_property(node):
-    return _LeafNodeProperty(node)
-
-
-def _appstruct_node(node, value):
-    return value
-
-
 def _content_type_factory(module, name, schema, bases):
     """
     Generate a content type class from a Colander schema.
@@ -132,6 +102,9 @@ def _content_type_factory(module, name, schema, bases):
                         error = colander.Invalid(schema)
                     error.add(e, i)
 
+            if error is not None:
+                raise error
+
             self._update_from_dict(appstruct, skip_missing=True)
 
         def serialize(self):
@@ -139,14 +112,15 @@ def _content_type_factory(module, name, schema, bases):
 
         def _update_from_dict(self, data, skip_missing):
             error = None
+            schema = self.__schema__
 
-            for i, node in enumerate(self.__schema__.children):
+            for i, node in enumerate(schema.children):
                 name = node.name
                 try:
                     setattr(self, name, data.pop(name, colander.null))
                 except colander.Invalid, e:
                     if error is None:
-                        error = colander.Invalid(node)
+                        error = colander.Invalid(schema)
                     error.add(e, i)
 
             if error is not None:
@@ -165,6 +139,88 @@ def _content_type_factory(module, name, schema, bases):
         setattr(ContentType, child.name, _make_property(child))
 
     return ContentType
+
+
+class _LeafNodeProperty(object):
+
+    def __init__(self, node):
+        self.node = node
+        name = node.name
+        assert name
+        self._attr = '.' + name
+
+    def __get__(self, obj, cls=None):
+        return obj.__dict__[self._attr]
+
+    def __set__(self, obj, value):
+        value = self._validate(value)
+        obj.__dict__[self._attr] = value
+
+    def _validate(self, value):
+        # serialize/deserialize forces colander to validate
+        # also will replace null values with defaults
+        node = self.node
+        return node.deserialize(node.serialize(value))
+
+
+class _MappingNodeProperty(_LeafNodeProperty):
+
+    def __set__(self, obj, appstruct):
+        obj.__dict__[self._attr] = _MappingNode(self.node, appstruct)
+
+
+class _MappingNode(object):
+
+    def __init__(self, schema, appstruct):
+        props = {}
+        error = None
+        data = appstruct.copy()
+        for i, child in enumerate(schema):
+            name = child.name
+            props[name] = prop = _make_property(child)
+            try:
+                prop.__set__(self, data.pop(name, colander.null))
+            except colander.Invalid, e:
+                if error is None:
+                    error = colander.Invalid(schema)
+                error.add(e, i)
+
+        if error is not None:
+            raise error
+
+        if data:
+            raise TypeError(
+                "Unexpected keyword argument(s): %s" % repr(data))
+
+        self.__dict__['__schema__'] = schema
+        self.__dict__['_props'] = props
+
+    def __getattr__(self, name):
+        prop = self._props.get(name, None)
+        if prop is None:
+            raise AttributeError(name)
+        return prop.__get__(self)
+
+    def __setattr__(self, name, value):
+        prop = self._props.get(name, None)
+        if prop is None:
+            return super(_MappingNode, self).__setattr__(name, value)
+        return prop.__set__(self, value)
+
+    def __iter__(self):
+        for name, prop in self._props.items():
+            yield name, _appstruct_node(prop.node, prop.__get__(self))
+
+
+def _make_property(node):
+    type = node.typ
+    if isinstance(type, colander.Mapping):
+        return _MappingNodeProperty(node)
+    return _LeafNodeProperty(node)
+
+
+def _appstruct_node(node, value):
+    return value
 
 
 class _FinderLoader(object):
