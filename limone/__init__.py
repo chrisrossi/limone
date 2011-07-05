@@ -155,6 +155,7 @@ class _LeafNodeProperty(object):
     def __set__(self, obj, value):
         value = self._validate(value)
         obj.__dict__[self._attr] = value
+        return value
 
     def _validate(self, value):
         # serialize/deserialize forces colander to validate
@@ -167,11 +168,13 @@ class _MappingNodeProperty(_LeafNodeProperty):
 
     def __set__(self, obj, appstruct):
         obj.__dict__[self._attr] = _MappingNode(self.node, appstruct)
+        return appstruct
 
 
 class _MappingNode(object):
 
     def __init__(self, schema, appstruct):
+        schema.typ._validate(schema, appstruct) # XXX private colander api
         props = {}
         error = None
         data = appstruct.copy()
@@ -212,10 +215,139 @@ class _MappingNode(object):
             yield name, _appstruct_node(prop.node, prop.__get__(self))
 
 
+class _SequenceNodeProperty(_LeafNodeProperty):
+
+    def __set__(self, obj, appstruct):
+        obj.__dict__[self._attr] = _SequenceNode(self.node, appstruct)
+        return appstruct
+
+
+class _SequenceNode(object):
+
+    def __init__(self, schema, appstruct):
+        # XXX calls private colander api.
+        schema.typ._validate(schema, appstruct, schema.typ.accept_scalar)
+        self.__schema__ = schema
+        self._prop = prop = _make_property(schema.children[0])
+
+        data = []
+        error = None
+        for i, item in enumerate(appstruct):
+            try:
+                data.append(_SequenceItem(prop, item))
+            except colander.Invalid, e:
+                if error is None:
+                    error = colander.Invalid(schema)
+                error.add(e, i)
+
+        if error is not None:
+            raise error
+
+        self._data = data
+
+    def __getitem__(self, index):
+        return self._data[index].get()
+
+    def __setitem__(self, index, value):
+        return self._data[index].set(value)
+
+    def __delitem__(self, index):
+        del self._data[index]
+
+    def __iter__(self):
+        for item in self._data:
+            yield item.get()
+
+    def __cmp__(self, right):
+        return cmp(list(self), right)
+
+    def __repr__(self):
+        return repr(list(self))
+
+    def append(self, item):
+        self._data.append(_SequenceItem(self._prop, item))
+
+    def extend(self, items):
+        prop = self._prop
+        data = self._data
+        for item in items:
+            data.append(_SequenceItem(prop, item))
+
+    def count(self, item):
+        n = 0
+        for x in self:
+            if x == item:
+                n += 1
+        return n
+
+    def index(self, item, start=0, stop=None):
+        if stop is None:
+            stop = len(self)
+        data = self._data
+        for index in xrange(start, stop):
+            x = data[index].get()
+            if x == item:
+                return index
+        raise ValueError("'%s' not in list" % item)
+
+    def __len__(self):
+        return len(self._data)
+
+    def insert(self, index, item):
+        self._data.insert(index, _SequenceItem(self._prop, item))
+
+    def pop(self, index=-1):
+        return self._data.pop(index).get()
+
+    def remove(self, item):
+        del self[self.index(item)]
+
+    def reverse(self):
+        self._data.reverse()
+
+    def __getslice__(self, i, j):
+        return [item.get() for item in self._data[i:j]]
+
+    def __setslice__(self, i, j, s):
+        error = None
+        items = []
+        prop = self._prop
+        for index, item in enumerate(s):
+            try:
+                items.append(_SequenceItem(prop, item))
+            except colander.Invalid, e:
+                if error is None:
+                    error = colander.Invalid(self.__schema__)
+                error.add(e, i + index)
+
+        if error is not None:
+            raise error
+
+        self._data[i:j] = items
+
+    def __delslice__(self, i, j):
+        del self._data[i:j]
+
+
+class _SequenceItem(object):
+
+    def __init__(self, prop, value):
+        self._prop = prop
+        prop.__set__(self, value)
+
+    def get(self):
+        return self._prop.__get__(self)
+
+    def set(self, value):
+        return self._prop.__set__(self, value)
+
+
 def _make_property(node):
     type = node.typ
     if isinstance(type, colander.Mapping):
         return _MappingNodeProperty(node)
+    if isinstance(type, colander.Sequence):
+        return _SequenceNodeProperty(node)
     return _LeafNodeProperty(node)
 
 

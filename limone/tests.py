@@ -182,6 +182,12 @@ class NestedMappingNodeTests(unittest2.TestCase):
         jack.personal.nsa_data.date_of_contact = today
         self.assertEqual(jack.personal.nsa_data.date_of_contact, today)
 
+    def test_invalid_assignment(self):
+        import colander
+        jack = self.test_construction()
+        with self.assertRaises(colander.Invalid):
+            jack.personal = 'foo'
+
     def test_assignment_of_appdata(self):
         import datetime
         today = datetime.date.today()
@@ -254,6 +260,175 @@ class NestedMappingNodeTests(unittest2.TestCase):
         self.assertEqual(jonas.personal.nsa_data.date_of_contact,
                          date(2011, 5, 12))
         self.assertEqual(jonas.personal.n_arrests, 6)
+
+
+class NestedSequenceNodeTests(unittest2.TestCase):
+
+    def setUp(self):
+        import colander
+        from limone import Limone
+
+        limone = Limone()
+
+        class Y(colander.SequenceSchema):
+            y = colander.SchemaNode(colander.Int())
+
+        class X(colander.SequenceSchema):
+            x = Y()
+
+        class Plane(colander.Schema):
+            id = colander.SchemaNode(colander.Str('UTF-8'), default='plane')
+            coords = X()
+
+        @limone.content_type(Plane)
+        class PlaneType(object):
+            foo = 'bar'
+
+        self.content_type = PlaneType
+
+    def test_construction(self):
+        plane = self.content_type(coords=[[1, 2, 3],
+                                          [4, 5, 6],
+                                          [7, 8, 9]])
+        self.assertEqual(plane.coords[0][0], 1)
+        self.assertEqual(plane.coords[0][1], 2)
+        self.assertEqual(plane.coords[0][2], 3)
+        self.assertEqual(plane.coords[1][0], 4)
+        self.assertEqual(plane.coords[1][1], 5)
+        self.assertEqual(plane.coords[1][2], 6)
+        self.assertEqual(plane.coords[2][0], 7)
+        self.assertEqual(plane.coords[2][1], 8)
+        self.assertEqual(plane.coords[2][2], 9)
+        self.assertEqual(plane.id, 'plane')
+        self.assertEqual(plane.foo, 'bar')
+        return plane
+
+    def test_comparison(self):
+        plane = self.test_construction()
+        coords = plane.coords[1]
+        self.assertLess(coords, [4, 5, 6, 7])
+        self.assertLess(coords, [5, 6, 7])
+        self.assertGreater(coords, [1, 2, 3])
+        self.assertEqual(coords, [4, 5, 6])
+
+    def test_repr(self):
+        plane = self.test_construction()
+        self.assertEqual(repr(plane.coords),
+                         '[[1, 2, 3], [4, 5, 6], [7, 8, 9]]')
+
+    def test_assignment(self):
+        plane = self.test_construction()
+        plane.coords[1][1] = 45
+        self.assertEqual(plane.coords[1][1], 45)
+
+    def test_validation(self):
+        import colander
+        plane = self.test_construction()
+        with self.assertRaises(colander.Invalid):
+            plane.coords[1][1] = 'forty five'
+
+    def test_assign_appstruct(self):
+        plane = self.test_construction()
+        plane.coords[1] = [45, 46, 47]
+        self.assertEqual(plane.coords[1], [45, 46, 47])
+
+    def test_assign_appstruct_invalid(self):
+        import colander
+        plane = self.test_construction()
+        with self.assertRaises(colander.Invalid) as ecm:
+            plane.coords[1] = ['one', 2, 'three']
+        self.assertEqual(
+            ecm.exception.asdict(), {
+            'x.0': u'"one" is not a number', 'x.2': u'"three" is not a number'}
+        )
+
+    def test_serialize(self):
+        plane = self.test_construction()
+        self.assertEqual(plane.serialize(), {
+            'coords': [['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9']],
+            'id': 'plane'
+        })
+
+    def test_deserialization(self):
+        plane = self.content_type.deserialize({
+            'coords': [['9', '8', '7'], ['6', '5']],
+            'id': 'test'})
+        self.assertEqual(plane.coords, [[9, 8, 7], [6, 5]])
+
+    def test_append(self):
+        import colander
+        plane = self.test_construction()
+        plane.coords[0].append(4)
+        self.assertEqual(plane.coords[0], [1, 2, 3, 4])
+        with self.assertRaises(colander.Invalid):
+            plane.coords.append(6)
+
+    def test_extend(self):
+        import colander
+        plane = self.test_construction()
+        plane.coords[0].extend([4, 5])
+        self.assertEqual(plane.coords[0], [1, 2, 3, 4, 5])
+        with self.assertRaises(colander.Invalid):
+            plane.coords.extend([1, 2])
+
+    def test_count(self):
+        plane = self.test_construction()
+        self.assertEqual(plane.coords[0].count(2), 1)
+
+    def test_index(self):
+        plane = self.test_construction()
+        coords = plane.coords[0]
+        self.assertEqual(coords.index(2), 1)
+        with self.assertRaises(ValueError):
+            coords.index(2, 0, 1)
+
+    def test_insert(self):
+        import colander
+        plane = self.test_construction()
+        plane.coords[0].insert(1, 8)
+        self.assertEqual(plane.coords[0], [1, 8, 2, 3])
+        with self.assertRaises(colander.Invalid):
+            plane.coords.insert(1, 1)
+
+    def test_pop(self):
+        plane = self.test_construction()
+        self.assertEqual(plane.coords[0].pop(0), 1)
+        self.assertEqual(plane.coords[0], [2, 3])
+
+    def test_remove(self):
+        plane = self.test_construction()
+        plane.coords[0].remove(2)
+        self.assertEqual(plane.coords[0], [1, 3])
+
+    def test_reverse(self):
+        plane = self.test_construction()
+        plane.coords[0].reverse()
+        self.assertEqual(plane.coords[0], [3, 2, 1])
+
+    def test_getslice(self):
+        plane = self.test_construction()
+        self.assertEqual(plane.coords[0][1:3], [2, 3])
+
+    def test_setslice(self):
+        import colander
+        plane = self.test_construction()
+        plane.coords[0][1:3] = [6, 7, 8]
+        self.assertEqual(plane.coords[0], [1, 6, 7, 8])
+        with self.assertRaises(colander.Invalid) as ecm:
+            plane.coords[0][1:3] = ['six', 'seven', 'eight']
+        self.assertEqual(ecm.exception.asdict(), {
+            'x.1': u'"six" is not a number',
+            'x.2': u'"seven" is not a number',
+            'x.3': u'"eight" is not a number'})
+
+    def test_delslice(self):
+        plane = self.test_construction()
+        del plane.coords[0][1:3]
+        self.assertEqual(plane.coords[0], [1])
+
+    def test_contains(self):
+        plane = self.test_construction()
+        self.assertTrue(2 in plane.coords[0])
 
 
 import colander
