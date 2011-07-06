@@ -1,64 +1,90 @@
 import colander
 import sys
+import venusian
 
-default = object()
 
-
-class Limone(object):
-    module = None
+class Registry(object):
+    """
+    Content type registry.
+    """
     _finder_loader = None
 
     def __init__(self):
         self._types = {}
 
-    def content_type(self, schema):
-        """
-        Decorator for turning a class into a content type using the passed in
-        Colander schema.
-        """
-        def decorator(cls):
-            module = self.module
-            if module is None:
-                module = cls.__module__
-            return self.add_content_type(cls.__name__, schema, module, (cls,))
-        return decorator
-
-    def content_schema(self, schema):
-        """
-        Decorator for turning a Colander schema into a content type.
-        """
-        module = self.module
-        if module is None:
-            module = schema.__module__
-        return self.add_content_type(schema.__name__, schema, module)
-
-    def add_content_type(self, name, schema, module=None, bases=(object,)):
+    def register_content_type(self, content_type):
         """
         Generate a content type class from a Colander schema.
         """
-        if module is None:
-            module = self.module
-        content_type = _content_type_factory(module, name, schema, bases)
-        self._types[name] = content_type
-        return content_type
+        self._types[content_type.__name__] = content_type
+        if self._finder_loader is not None:
+            content_type._original__module__ = content_type.__module__
+            content_type.__module__ = self._finder_loader.module
 
     def get_content_type(self, name):
+        """
+        Retrieve a content type by name.
+        """
         return self._types.get(name)
 
     def get_content_types(self):
+        """
+        Retrieve a tuple containing all of the content types registered with
+        this instance.
+        """
         return tuple(self._types.values())
 
     def hook_import(self, module='__limone__'):
+        """
+        Hook into the Python import mechanism so that registered content types
+        can be registered
+        """
         self._finder_loader =  _FinderLoader(self, module)
-        self.module = module
+        for ct in self._types.values():
+            ct._original__module__ = ct.__module__
+            ct.__module__ = module
 
     def unhook_import(self):
-        self._finder_loader.unload()
-        del self.module
-        del self._finder_loader
+        """
+        Undo the import hook.
+        """
+        if self._finder_loader is not None:
+            self._finder_loader.unload()
+            del self._finder_loader
+            for ct in self._types.values():
+                ct.__module__ = ct._original__module__
+                del ct._original__module__
+
+    def scan(self, module):
+        scanner = venusian.Scanner(limone=self)
+        scanner.scan(module, categories=('limone',))
 
 
-def _content_type_factory(module, name, schema, bases):
+def content_schema(schema):
+    """
+    Decorator for turning a Colander schema into a content type.
+    """
+    ct = make_content_type(schema, schema.__name__, schema.__module__)
+    def callback(scanner, name, ob):
+        scanner.limone.register_content_type(ct)
+    venusian.attach(ct, callback, category='limone')
+    return ct
+
+def content_type(schema):
+    """
+    Decorator for turning a class into a content type using the passed in
+    Colander schema.
+    """
+    def decorator(cls):
+        ct = make_content_type(schema, cls.__name__, cls.__module__, (cls,))
+        def callback(scanner, name, ob):
+            scanner.limone.register_content_type(ct)
+        venusian.attach(ct, callback, category='limone')
+        return ct
+    return decorator
+
+
+def make_content_type(schema, name, module=None, bases=(object,)):
     """
     Generate a content type class from a Colander schema.
     """
@@ -407,7 +433,7 @@ class _FinderLoader(object):
     def load_module(self, module):
         limone = self.limone
         sys.modules[module] = self
-        return limone
+        return self
 
     def __getattr__(self, name):
         return self.limone.get_content_type(name)

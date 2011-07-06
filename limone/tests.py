@@ -6,17 +6,14 @@ class MakeContentTypeTests(unittest2.TestCase):
     def test_schema_is_wrong_type(self):
         import limone
         with self.assertRaises(TypeError):
-            limone.Limone().add_content_type('Foo', object)
+            limone.make_content_type('Foo', object)
 
 
 class ShallowSchemaTests(unittest2.TestCase):
 
     def setUp(self):
         import colander
-        from limone import Limone
-
-        self.limone = limone = Limone()
-        limone.hook_import()
+        import limone
 
         class PersonSchema(colander.Schema):
             name = colander.SchemaNode(colander.String('UTF-8'))
@@ -34,29 +31,10 @@ class ShallowSchemaTests(unittest2.TestCase):
 
         self.content_type = Person
 
-    def tearDown(self):
-        self.limone.unhook_import()
-
     def test_content_type(self):
         ct = self.content_type
         self.assertEqual(ct.__bases__[0].__name__, 'Person')
         self.assertEqual(ct.__name__, 'Person')
-
-    def test_hook_import(self):
-        import limone
-        import sys
-
-        __import__('__limone__')
-        module = sys.modules['__limone__']
-        self.assertIsInstance(module.limone, limone.Limone)
-        self.assertEqual(module.Person, self.content_type)
-
-    def test_get_content_type(self):
-        self.assertEqual(self.limone.get_content_type('Person'),
-                         self.content_type)
-
-    def test_get_content_types(self):
-        self.assertEqual(self.limone.get_content_types(), (self.content_type,))
 
     def test_constructor(self):
         joe = self.content_type(name='Joe', age=35)
@@ -131,16 +109,75 @@ class ShallowSchemaTests(unittest2.TestCase):
         self.assertEqual(ecm.exception.asdict(), {
             'age': u'"forty" is not a number', 'name': u'Required'})
 
+
+class RegistryTests(unittest2.TestCase):
+
+    def setUp(self):
+        import colander
+        import limone
+
+        class Person(colander.Schema):
+            name = colander.SchemaNode(colander.String('UTF-8'))
+            age = colander.SchemaNode(colander.Integer())
+
+        self.content_type = limone.make_content_type(Person, 'Person')
+        self.registry = limone.Registry()
+        self.registry.register_content_type(self.content_type)
+
+    def test_get_content_type(self):
+        self.assertEqual(self.registry.get_content_type('Person'),
+                         self.content_type)
+
+    def test_get_content_types(self):
+        self.assertEqual(self.registry.get_content_types(),
+                         (self.content_type,))
+
+    def test_hook_import(self):
+        self.registry.hook_import()
+        self.addCleanup(self.registry.unhook_import)
+
+        from __limone__ import Person
+        self.assertEqual(Person, self.content_type)
+
+        import sys
+        module = sys.modules['__limone__']
+        self.assertEqual(module.Person, self.content_type)
+
     def test_can_pickle_instance(self):
         import pickle
+        self.registry.hook_import()
+        self.addCleanup(self.registry.unhook_import)
+
         joe = self.content_type(name='Joe', age=35)
         new_joe = pickle.loads(pickle.dumps(joe))
         self.assertEqual(new_joe.name, 'Joe')
         self.assertEqual(new_joe.age, 35)
         self.assertIsInstance(new_joe, self.content_type)
 
+    def test_can_pickle_instance_registered_after_hook(self):
+        import colander
+        import limone
+        import pickle
+
+        @limone.content_schema
+        class Foo(colander.Schema):
+            bar = colander.SchemaNode(colander.Int())
+
+        self.registry.hook_import()
+        self.registry.register_content_type(Foo)
+        self.addCleanup(self.registry.unhook_import)
+
+        foo = Foo(bar=42)
+        new_foo = pickle.loads(pickle.dumps(foo))
+        self.assertEqual(new_foo.bar, 42)
+        self.assertIsInstance(new_foo, Foo)
+        self.assertIsNot(foo, new_foo)
+
     def test_can_pickle_type(self):
         import pickle
+        self.registry.hook_import()
+        self.addCleanup(self.registry.unhook_import)
+
         ct = pickle.loads(pickle.dumps(self.content_type))
         self.assertEqual(ct.__schema__.children[0].name, 'name')
 
@@ -149,9 +186,7 @@ class NestedMappingNodeTests(unittest2.TestCase):
 
     def setUp(self):
         import colander
-        from limone import Limone
-
-        limone = Limone()
+        import limone
 
         class NSAData(colander.Schema):
             serialnum = colander.SchemaNode(colander.Str('UTF-8'))
@@ -166,7 +201,7 @@ class NestedMappingNodeTests(unittest2.TestCase):
             age = colander.SchemaNode(colander.Integer(), default=500)
             personal = PersonalData()
 
-        self.content_type = limone.add_content_type('Person', PersonSchema)
+        self.content_type = limone.make_content_type(PersonSchema, 'Person')
 
     def test_construction(self):
         import datetime
@@ -289,9 +324,7 @@ class NestedSequenceNodeTests(unittest2.TestCase):
 
     def setUp(self):
         import colander
-        from limone import Limone
-
-        limone = Limone()
+        import limone
 
         class Y(colander.SequenceSchema):
             y = colander.SchemaNode(colander.Int())
@@ -465,9 +498,7 @@ class TupleNodeTests(unittest2.TestCase):
 
     def setUp(self):
         import colander
-        from limone import Limone
-
-        limone = Limone()
+        import limone
 
         class Numbers(colander.SequenceSchema):
             numbers = colander.SchemaNode(colander.Int())
@@ -516,9 +547,7 @@ class ColanderExampleTests(unittest2.TestCase):
 
     def setUp(self):
         import colander
-        from limone import Limone
-
-        limone = Limone()
+        import limone
 
         class Friend(colander.TupleSchema):
             rank = colander.SchemaNode(colander.Int(),
@@ -568,14 +597,20 @@ class ColanderExampleTests(unittest2.TestCase):
 
 
 import colander
-from limone import Limone as Limone
-limone = Limone()
+import limone
 
 @limone.content_schema
 class Cat(colander.Schema):
     fur = colander.SchemaNode(colander.String('UTF-8'))
 
-class TestTypesAtModuleScopeDontNeedImportHooks(unittest2.TestCase):
+class DogSchema(colander.Schema):
+    smell = colander.SchemaNode(colander.String('UTF-8'))
+
+@limone.content_type(DogSchema)
+class Dog(object):
+    pass
+
+class TestTypeAtModuleScope(unittest2.TestCase):
 
     def test_module_and_name_are_correct(self):
         self.assertEqual(Cat.__module__, 'limone.tests')
@@ -591,3 +626,10 @@ class TestTypesAtModuleScopeDontNeedImportHooks(unittest2.TestCase):
         import pickle
         ct = pickle.loads(pickle.dumps(Cat))
         self.assertEqual(ct.__schema__.children[0].name, 'fur')
+
+    def test_scan(self):
+        import limone.tests
+        registry = limone.Registry()
+        registry.scan(limone.tests)
+        self.assertEqual(sorted(registry.get_content_types()), [Cat, Dog])
+

@@ -13,12 +13,13 @@ except IOError:
 
 install_requires = [
     'colander',
+    'venusian',
     ]
 
 tests_require = install_requires
 
 if sys.version_info[:2] < (2, 7):
-    test_requires += ['unittest2']
+    tests_require += ['unittest2']
 
 setup(name='limone',
       version='0.1',
