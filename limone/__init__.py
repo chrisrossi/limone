@@ -164,6 +164,8 @@ class _LeafNodeProperty(object):
 class _MappingNodeProperty(_LeafNodeProperty):
 
     def _validate(self, value):
+        if value is colander.null:
+            value = {}
         return _MappingNode(self.node, value)
 
 
@@ -214,6 +216,8 @@ class _MappingNode(object):
 class _SequenceNodeProperty(_LeafNodeProperty):
 
     def _validate(self, value):
+        if value is colander.null:
+            value = []
         return _SequenceNode(self.node, value)
 
 

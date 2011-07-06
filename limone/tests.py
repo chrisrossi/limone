@@ -175,6 +175,15 @@ class NestedMappingNodeTests(unittest2.TestCase):
         self.assertEqual(jack.personal.n_arrests, 5)
         return jack
 
+    def test_construction_missing(self):
+        import colander
+        with self.assertRaises(colander.Invalid) as ecm:
+            jack = self.content_type(name='Jack', age=500)
+        self.assertEqual(ecm.exception.asdict(), {
+            'personal.n_arrests': u'Required',
+            'personal.nsa_data.date_of_contact': u'Required',
+            'personal.nsa_data.serialnum': u'Required'})
+
     def test_assignment(self):
         import datetime
         today = datetime.date.today()
@@ -302,6 +311,13 @@ class NestedSequenceNodeTests(unittest2.TestCase):
         self.assertEqual(plane.id, 'plane')
         self.assertEqual(plane.foo, 'bar')
         return plane
+
+    def test_construction_empty(self):
+        plane = self.content_type()
+        self.assertEqual(plane.coords, [])
+        plane.coords.append([1, 2])
+        plane.coords.append([3, 4])
+        self.assertEqual(plane.coords, [[1, 2], [3, 4]])
 
     def test_comparison(self):
         plane = self.test_construction()
