@@ -121,7 +121,10 @@ def _content_type_factory(module, name, schema, bases):
             for i, node in enumerate(schema.children):
                 name = node.name
                 try:
-                    setattr(self, name, data.pop(name, colander.null))
+                    value = data.pop(name, colander.null)
+                    if value is colander.null and skip_missing:
+                        continue
+                    setattr(self, name, value)
                 except colander.Invalid, e:
                     if error is None:
                         error = colander.Invalid(schema)
@@ -330,6 +333,9 @@ class _SequenceNode(object):
 
     def __delslice__(self, i, j):
         del self._data[i:j]
+
+    def _appstruct(self):
+        return [_appstruct_node(item) for item in self]
 
 
 class _SequenceItem(object):

@@ -120,6 +120,8 @@ class ShallowSchemaTests(unittest2.TestCase):
         joe.deserialize_update({'age': '40', 'name': 'Gio'})
         self.assertEqual(joe.name, 'Gio')
         self.assertEqual(joe.age, 40)
+        joe.deserialize_update({'age': '41'})
+        self.assertEqual(joe.age, 41)
 
     def test_deserialize_update_invalid(self):
         import colander
@@ -509,6 +511,60 @@ class TupleNodeTests(unittest2.TestCase):
         self.assertEqual(ecm.exception.asdict(), {
             'stream': u'"1" is not iterable'})
 
+
+class ColanderExampleTests(unittest2.TestCase):
+
+    def setUp(self):
+        import colander
+        from limone import Limone
+
+        limone = Limone()
+
+        class Friend(colander.TupleSchema):
+            rank = colander.SchemaNode(colander.Int(),
+                                      validator=colander.Range(0, 9999))
+            name = colander.SchemaNode(colander.String())
+
+        class Phone(colander.MappingSchema):
+            location = colander.SchemaNode(colander.String(),
+                                          validator=colander.OneOf(['home', 'work']))
+            number = colander.SchemaNode(colander.String())
+
+        class Friends(colander.SequenceSchema):
+            friend = Friend()
+
+        class Phones(colander.SequenceSchema):
+            phone = Phone()
+
+        @limone.content_schema
+        class Person(colander.MappingSchema):
+            name = colander.SchemaNode(colander.String())
+            age = colander.SchemaNode(colander.Int(),
+                                     validator=colander.Range(0, 200))
+            friends = Friends()
+            phones = Phones()
+
+        self.content_type = Person
+
+    def make_one(self):
+        return self.content_type(
+            name='Jack',
+            age=52,
+            friends=[
+                (1, 'Fred'),
+                (2, 'Barney')
+            ],
+            phones=[
+                {'location': 'home',
+                 'number': '555-1212'},
+            ])
+
+    def test_serialize(self):
+        self.assertEqual(self.make_one().serialize(), {
+            'age': '52',
+            'friends': [('1', u'Fred'), ('2', u'Barney')],
+            'name': u'Jack',
+            'phones': [{'location': u'home', 'number': u'555-1212'}]})
 
 
 import colander
