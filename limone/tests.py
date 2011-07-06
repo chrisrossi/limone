@@ -24,8 +24,12 @@ class ShallowSchemaTests(unittest2.TestCase):
 
         self.schema = PersonSchema
 
+        class Record(object):
+            def __init__(self):
+                self.hr_code = 'foo'
+
         @limone.content_type(PersonSchema)
-        class Person(object):
+        class Person(Record):
             pass
 
         self.content_type = Person
@@ -51,6 +55,7 @@ class ShallowSchemaTests(unittest2.TestCase):
         joe = self.content_type(name='Joe', age=35)
         self.assertEqual(joe.name, 'Joe')
         self.assertEqual(joe.age, 35)
+        self.assertEqual(joe.hr_code, 'foo')
 
     def test_constructor_invalid(self):
         import colander

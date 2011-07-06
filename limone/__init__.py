@@ -83,6 +83,7 @@ def _content_type_factory(module, name, schema, bases):
             return cls(**appstruct)
 
         def __init__(self, **kw):
+            super(ContentType, self).__init__()
             kw = self._update_from_dict(kw, skip_missing=False)
 
             if kw:
