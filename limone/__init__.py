@@ -45,6 +45,9 @@ class Limone(object):
     def get_content_type(self, name):
         return self._types.get(name)
 
+    def get_content_types(self):
+        return tuple(self._types.values())
+
     def hook_import(self, module='__limone__'):
         self._finder_loader =  _FinderLoader(self, module)
         self.module = module

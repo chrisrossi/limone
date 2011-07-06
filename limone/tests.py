@@ -51,6 +51,13 @@ class ShallowSchemaTests(unittest2.TestCase):
         self.assertIsInstance(module.limone, limone.Limone)
         self.assertEqual(module.Person, self.content_type)
 
+    def test_get_content_type(self):
+        self.assertEqual(self.limone.get_content_type('Person'),
+                         self.content_type)
+
+    def test_get_content_types(self):
+        self.assertEqual(self.limone.get_content_types(), (self.content_type,))
+
     def test_constructor(self):
         joe = self.content_type(name='Joe', age=35)
         self.assertEqual(joe.name, 'Joe')
