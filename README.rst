@@ -154,7 +154,7 @@ A tuple of all of the registered content types can be retrieved using the
     for content_type in limone.get_content_types():
         print content_type.__name__, content_type
 
-Prints:
+Prints::
 
     Person <class 'Person'>
 
