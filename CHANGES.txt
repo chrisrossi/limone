@@ -1,0 +1,7 @@
+Changelog for Limone
+--------------------
+
+0.1a1 (2011-07-06)
+==================
+
+- First alpha release.
