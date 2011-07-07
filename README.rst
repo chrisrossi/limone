@@ -145,8 +145,14 @@ Using the Limone Registry
 
 Instances `limone.Registry` can be used to keep track of available content
 types.  An instance of `limone.Registry` is required to make content types
-available via an import hook.  (See `Using the Import Hook`_.)  Content types
-are added to the registry using the `register_content_type` method::
+available via an import hook.  (See `Using the Import Hook`_.)
+
+
+Basic Registration and Retrieval of Content Types
++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Content types are added to the registry using the `register_content_type`
+method::
 
     registry = limone.Registry()
     registry.regsister_content_type(Person)
@@ -167,8 +173,24 @@ Prints::
     Person <class 'Person'>
 
 
+Scanning for Content Types
+++++++++++++++++++++++++++
+
+A registry instance can also find content types by scanning a package looking
+for content types to add to the registry.  This is possible if you have used
+either the `content_type` or `content_schema` decorator somewhere in your
+package.  The `scan` method is used to search for content types defined with
+those decorators and add them to the registry::
+
+    import limone
+    import myapp.models
+
+    registry = limone.Registry()
+    registry.scan(myapp.models)
+
+
 Using the Import Hook
----------------------
++++++++++++++++++++++
 
 In the above two declarative examples, because types were being generated at
 module scope, they can be imported using the standard Python import mechanism.
