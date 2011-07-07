@@ -2,9 +2,15 @@
 Limone
 ======
 
-Limone is a library for generating content types from a Colander_ schema.  A
+Limone is a library for generating content types from a Colander_ schema. A
 content type is, in this context, a class that implements the structure and
-constraints specified by the schema.
+constraints specified by the schema. This allows a developer to easily
+generate model objects which enforce the constraints of the schema, performing
+validation during initialization and attribute assignment. Objects are
+serializable and deserializable via Colander's serialization.  Because types
+are generated at runtime, Limone also suggests the development of applications
+where the structure of the objects used to store your application's data can
+be derived from configuration or user input.
 
 .. _Colander: http://docs.pylonsproject.org/projects/colander/dev/
 
