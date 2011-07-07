@@ -112,7 +112,14 @@ def make_content_type(schema, name, module=None, bases=(object,)):
             return cls(**appstruct)
 
         def __init__(self, **kw):
-            super(ContentType, self).__init__()
+            try:
+                super(ContentType, self).__init__()
+            except TypeError:
+                # Substitute error message more pertinent to situation at hand.
+                raise TypeError(
+                    'Limone content types may only extend types with no-arg '
+                    'constructors.')
+
             kw = self._update_from_dict(kw, skip_missing=False)
 
             if kw:

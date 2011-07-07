@@ -6,7 +6,29 @@ class MakeContentTypeTests(unittest2.TestCase):
     def test_schema_is_wrong_type(self):
         import limone
         with self.assertRaises(TypeError):
-            limone.make_content_type('Foo', object)
+            limone.make_content_type(object, 'Foo')
+
+
+    def test_base_lacks_noarg_constructor(self):
+        import colander
+        import limone
+
+        class Base(object):
+            def __init__(self, x):
+                self.x = x
+
+        class Schema(colander.Schema):
+            foo = colander.SchemaNode(colander.Int())
+
+        # XXX would be a little nicer if we could catch this when generating
+        #     the type, rather than waiting for an instantiation.
+        Foo = limone.make_content_type(Schema, 'Foo', bases=(Base,))
+        with self.assertRaises(TypeError) as ecm:
+            foo = Foo(foo=1)
+        self.assertEqual(
+            str(ecm.exception),
+            "Limone content types may only extend types with no-arg "
+            "constructors.")
 
 
 class ShallowSchemaTests(unittest2.TestCase):
@@ -631,5 +653,8 @@ class TestTypeAtModuleScope(unittest2.TestCase):
         import limone.tests
         registry = limone.Registry()
         registry.scan(limone.tests)
-        self.assertEqual(sorted(registry.get_content_types()), [Cat, Dog])
+        sort_key = lambda cls: cls.__name__
+        self.assertEqual(
+            sorted(registry.get_content_types(), key=sort_key),
+            [Cat, Dog])
 
