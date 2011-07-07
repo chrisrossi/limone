@@ -4,6 +4,8 @@ import sys
 
 from setuptools import setup, find_packages
 
+VERSION = '0.1a1'
+
 here = os.path.abspath(os.path.dirname(__file__))
 try:
     README = open(os.path.join(here, 'README.rst')).read()
@@ -22,7 +24,7 @@ if sys.version_info[:2] < (2, 7):
     tests_require += ['unittest2']
 
 setup(name='limone',
-      version='0.1',
+      version=VERSION,
       description=('Content type system based on colander schemas.'),
       long_description=README + '\n\n' +  CHANGES,
       classifiers=[
