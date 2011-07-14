@@ -127,9 +127,9 @@ class ShallowSchemaTests(unittest2.TestCase):
         import colander
         joe = self.content_type(name='Joe', age=35)
         with self.assertRaises(colander.Invalid) as ecm:
-            joe.deserialize_update({'age': 'forty', 'name': None})
+            joe.deserialize_update({'age': 'forty'})
         self.assertEqual(ecm.exception.asdict(), {
-            'age': u'"forty" is not a number', 'name': u'Required'})
+            'age': u'"forty" is not a number'})
 
 
 class RegistryTests(unittest2.TestCase):
