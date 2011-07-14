@@ -14,7 +14,7 @@ class MakeContentTypeTests(unittest2.TestCase):
         import limone
 
         class Base(object):
-            def __init__(self, x):
+            def __init__(self, x): #pragma NO COVERAGE
                 self.x = x
 
         class Schema(colander.Schema):

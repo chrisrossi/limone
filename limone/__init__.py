@@ -60,31 +60,48 @@ class Registry(object):
         scanner.scan(module, categories=('limone',))
 
 
-def content_schema(schema):
+class _ContentSchemaDecorator(object):
     """
     Decorator for turning a Colander schema into a content type.
     """
-    ct = make_content_type(schema, schema.__name__, schema.__module__)
-    def callback(scanner, name, ob):
-        scanner.limone.register_content_type(ct)
-    venusian.attach(ct, callback, category='limone')
-    return ct
+    def __init__(self, meta=type):
+        self.meta = meta
 
-def content_type(schema):
-    """
-    Decorator for turning a class into a content type using the passed in
-    Colander schema.
-    """
-    def decorator(cls):
-        ct = make_content_type(schema, cls.__name__, cls.__module__, (cls,))
+    def __call__(self, schema):
+        ct = make_content_type(
+            schema, schema.__name__, schema.__module__, meta=self.meta)
         def callback(scanner, name, ob):
             scanner.limone.register_content_type(ct)
         venusian.attach(ct, callback, category='limone')
         return ct
-    return decorator
 
 
-def make_content_type(schema, name, module=None, bases=(object,)):
+content_schema = _ContentSchemaDecorator()
+
+
+class _ContentTypeDecorator(object):
+    """
+    Decorator for turning a class into a content type using the passed in
+    Colander schema.
+    """
+    def __init__(self, meta=type):
+        self.meta = meta
+
+    def __call__(self, schema):
+        def decorator(cls):
+            ct = make_content_type(
+                schema, cls.__name__, cls.__module__, (cls,), self.meta)
+            def callback(scanner, name, ob):
+                scanner.limone.register_content_type(ct)
+            venusian.attach(ct, callback, category='limone')
+            return ct
+        return decorator
+
+
+content_type = _ContentTypeDecorator()
+
+
+def make_content_type(schema, name, module=None, bases=(object,), meta=type):
     """
     Generate a content type class from a Colander schema.
     """
@@ -94,17 +111,21 @@ def make_content_type(schema, name, module=None, bases=(object,)):
     if type(getattr(schema, 'typ', None)) != colander.Mapping:
         raise TypeError('Schema must be a colander mapping schema.')
 
-    class MetaType(type):
+    class MetaType(meta):
         def __new__(cls, throw, away, members):
-            return type.__new__(cls, name, bases, members)
+            return meta.__new__(cls, name, bases, members)
 
         def __init__(cls, throw, away, members):
-            type.__init__(cls, name, bases, members)
+            meta.__init__(cls, name, bases, members)
             cls.__module__ = module
+            cls.__content_type__ = cls
 
     class ContentType(object):
         __metaclass__ = MetaType
         __schema__ = schema
+        _MappingNode = _MappingNode
+        _SequenceNode = _SequenceNode
+        _SequenceItem = _SequenceItem
 
         @classmethod
         def deserialize(cls, cstruct):
@@ -173,7 +194,7 @@ def make_content_type(schema, name, module=None, bases=(object,)):
                     for node in self.__schema__]
 
     for node in schema:
-        setattr(ContentType, node.name, _make_property(node))
+        setattr(ContentType, node.name, _make_property(ContentType, node))
 
     return ContentType
 
@@ -190,11 +211,11 @@ class _LeafNodeProperty(object):
         return obj.__dict__[self._attr]
 
     def __set__(self, obj, value):
-        value = self._validate(value)
+        value = self._validate(obj.__content_type__, value)
         obj.__dict__[self._attr] = value
         return value
 
-    def _validate(self, value):
+    def _validate(self, content_type, value):
         # serialize/deserialize forces colander to validate
         # also will replace null values with defaults
         node = self.node
@@ -203,22 +224,23 @@ class _LeafNodeProperty(object):
 
 class _MappingNodeProperty(_LeafNodeProperty):
 
-    def _validate(self, value):
+    def _validate(self, content_type, value):
         if value is colander.null:
             value = {}
-        return _MappingNode(self.node, value)
+        return content_type._MappingNode(content_type, self.node, value)
 
 
 class _MappingNode(object):
 
-    def __init__(self, schema, appstruct):
+    def __init__(self, content_type, schema, appstruct):
+        self.__dict__['__content_type__'] = content_type
         schema.typ._validate(schema, appstruct) # XXX private colander api
         props = {}
         error = None
         data = appstruct.copy()
         for i, node in enumerate(schema):
             name = node.name
-            props[name] = prop = _make_property(node)
+            props[name] = prop = _make_property(content_type, node)
             try:
                 prop.__set__(self, data.pop(name, colander.null))
             except colander.Invalid, e:
@@ -255,25 +277,29 @@ class _MappingNode(object):
 
 class _SequenceNodeProperty(_LeafNodeProperty):
 
-    def _validate(self, value):
+    def _validate(self, content_type, value):
         if value is colander.null:
             value = []
-        return _SequenceNode(self.node, value)
+        return content_type._SequenceNode(content_type, self.node, value)
 
 
 class _SequenceNode(object):
+    _data_type = list
 
-    def __init__(self, schema, appstruct):
+    def __init__(self, content_type, schema, appstruct):
         # XXX calls private colander api.
+        self.__content_type__ = content_type
         schema.typ._validate(schema, appstruct, schema.typ.accept_scalar)
         self.__schema__ = schema
-        self._prop = prop = _make_property(schema.children[0])
+        self._prop = prop = _make_property(content_type, schema.children[0])
 
-        data = []
+        data = self._data_type()
         error = None
+        content_type = self.__content_type__
         for i, item in enumerate(appstruct):
             try:
-                data.append(_SequenceItem(prop, item))
+                data.append(content_type._SequenceItem(
+                    content_type, prop, item))
             except colander.Invalid, e:
                 if error is None:
                     error = colander.Invalid(schema)
@@ -288,7 +314,9 @@ class _SequenceNode(object):
         return self._data[index].get()
 
     def __setitem__(self, index, value):
-        return self._data[index].set(value)
+        content_type = self.__content_type__
+        self._data[index] = content_type._SequenceItem(
+            content_type, self._prop, value)
 
     def __delitem__(self, index):
         del self._data[index]
@@ -304,13 +332,16 @@ class _SequenceNode(object):
         return repr(list(self))
 
     def append(self, item):
-        self._data.append(_SequenceItem(self._prop, item))
+        content_type = self.__content_type__
+        self._data.append(
+            content_type._SequenceItem(content_type, self._prop, item))
 
     def extend(self, items):
         prop = self._prop
         data = self._data
+        content_type = self.__content_type__
         for item in items:
-            data.append(_SequenceItem(prop, item))
+            data.append(content_type._SequenceItem(content_type, prop, item))
 
     def count(self, item):
         n = 0
@@ -333,7 +364,9 @@ class _SequenceNode(object):
         return len(self._data)
 
     def insert(self, index, item):
-        self._data.insert(index, _SequenceItem(self._prop, item))
+        content_type = self.__content_type__
+        self._data.insert(index, content_type._SequenceItem(
+            content_type, self._prop, item))
 
     def pop(self, index=-1):
         return self._data.pop(index).get()
@@ -351,9 +384,11 @@ class _SequenceNode(object):
         error = None
         items = []
         prop = self._prop
+        content_type = self.__content_type__
         for index, item in enumerate(s):
             try:
-                items.append(_SequenceItem(prop, item))
+                items.append(
+                    content_type._SequenceItem(content_type, prop, item))
             except colander.Invalid, e:
                 if error is None:
                     error = colander.Invalid(self.__schema__)
@@ -373,31 +408,31 @@ class _SequenceNode(object):
 
 class _SequenceItem(object):
 
-    def __init__(self, prop, value):
+    def __init__(self, content_type, prop, value):
+        self.__content_type__ = content_type
         self._prop = prop
         prop.__set__(self, value)
 
     def get(self):
         return self._prop.__get__(self)
 
-    def set(self, value):
-        return self._prop.__set__(self, value)
-
 
 class _TupleNodeProperty(_LeafNodeProperty):
 
-    def __init__(self, node):
+    def __init__(self, content_type, node):
         super(_TupleNodeProperty, self).__init__(node)
-        self._props = tuple(_make_property(child) for child in node)
+        self._props = tuple(_make_property(content_type, child)
+                            for child in node)
 
-    def _validate(self, value):
+    def _validate(self, content_type, value):
         node = self.node
         node.typ._validate(node, value) # XXX private colander api
         items = []
         error = None
         for i, (item, prop) in enumerate(zip(value, self._props)):
             try:
-                items.append(_SequenceItem(prop, item))
+                items.append(
+                    content_type._SequenceItem(content_type, prop, item))
             except colander.Invalid, e:
                 if error is None:
                     error = colander.Invalid(node)
@@ -409,14 +444,14 @@ class _TupleNodeProperty(_LeafNodeProperty):
         return tuple(item.get() for item in items)
 
 
-def _make_property(node):
+def _make_property(content_type, node):
     type = node.typ
     if isinstance(type, colander.Mapping):
         return _MappingNodeProperty(node)
     if isinstance(type, colander.Sequence):
         return _SequenceNodeProperty(node)
     if isinstance(type, colander.Tuple):
-        return _TupleNodeProperty(node)
+        return _TupleNodeProperty(content_type, node)
     return _LeafNodeProperty(node)
 
 
