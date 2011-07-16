@@ -1,8 +1,8 @@
 Changelog for Limone
 --------------------
 
-Unreleased
-++++++++++
+0.1a2 (2011-07-16
++++++++++++++++++
 
 - Refactored some internals to allow extension by packages that might want to
   use Limone as a base.  See `limone_zodb` as an example.
