@@ -212,7 +212,7 @@ class _LeafNodeProperty(object):
 
     def __set__(self, obj, value):
         value = self._validate(obj.__content_type__, value)
-        obj.__dict__[self._attr] = value
+        setattr(obj, self._attr, value)
         return value
 
     def _validate(self, content_type, value):
@@ -265,10 +265,12 @@ class _MappingNode(object):
         return prop.__get__(self)
 
     def __setattr__(self, name, value):
-        prop = self._props.get(name, None)
-        if prop is None:
-            return super(_MappingNode, self).__setattr__(name, value)
-        return prop.__set__(self, value)
+        props = self.__dict__.get('_props')
+        if props is not None:
+            prop = props.get(name)
+            if prop is not None:
+                return prop.__set__(self, value)
+        return super(_MappingNode, self).__setattr__(name, value)
 
     def _appstruct(self):
         return [(name, _appstruct_node(prop.__get__(self))) for

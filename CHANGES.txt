@@ -4,10 +4,12 @@ Changelog for Limone
 Unreleased
 ++++++++++
 
-- ...
+- Make sure that a property of a _MappingNode is set that __setattr__ is used
+  to set the underlying attribute.  This is done for the benefit of extensions
+  that rely on __setattr__ being called, such as `limone_zodb`.
 
-0.1a2 (2011-07-16
-+++++++++++++++++
+0.1a2 (2011-07-16)
+++++++++++++++++++
 
 - Refactored some internals to allow extension by packages that might want to
   use Limone as a base.  See `limone_zodb` as an example.
