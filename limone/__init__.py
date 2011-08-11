@@ -215,6 +215,7 @@ def make_content_type(schema, name, module=None, bases=(object,), meta=type,
 class _LeafNodeProperty(object):
 
     def __init__(self, content, node):
+        self.content = content
         self.node = node
         name = node.name
         assert name
