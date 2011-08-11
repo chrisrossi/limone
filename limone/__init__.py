@@ -60,158 +60,6 @@ class Registry(object):
         scanner.scan(module, categories=('limone',))
 
 
-class _ContentSchemaDecorator(object):
-    """
-    Decorator for turning a Colander schema into a content type.
-    """
-    def __init__(self, meta=type, property_factory=None):
-        self.meta = meta
-        self.property_factory = property_factory
-
-    def __call__(self, schema):
-        ct = make_content_type(
-            schema, schema.__name__, schema.__module__, meta=self.meta,
-            property_factory=self.property_factory
-        )
-        def callback(scanner, name, ob):
-            scanner.limone.register_content_type(ct)
-        venusian.attach(ct, callback, category='limone')
-        return ct
-
-
-content_schema = _ContentSchemaDecorator()
-
-
-class _ContentTypeDecorator(object):
-    """
-    Decorator for turning a class into a content type using the passed in
-    Colander schema.
-    """
-    def __init__(self, meta=type, property_factory=None):
-        self.meta = meta
-        self.property_factory = property_factory
-
-    def __call__(self, schema):
-        def decorator(cls):
-            ct = make_content_type(
-                schema, cls.__name__, cls.__module__, (cls,), self.meta,
-                property_factory=self.property_factory
-            )
-            def callback(scanner, name, ob):
-                scanner.limone.register_content_type(ct)
-            venusian.attach(ct, callback, category='limone')
-            return ct
-        return decorator
-
-
-content_type = _ContentTypeDecorator()
-
-
-def make_content_type(schema, name, module=None, bases=(object,), meta=type,
-                      property_factory=None):
-    """
-    Generate a content type class from a Colander schema.
-    """
-    if isinstance(schema, type):
-        schema = schema()
-
-    if type(getattr(schema, 'typ', None)) != colander.Mapping:
-        raise TypeError('Schema must be a colander mapping schema.')
-
-    if property_factory is None:
-        property_factory = PropertyFactory()
-
-    class MetaType(meta):
-        def __new__(cls, throw, away, members):
-            return meta.__new__(cls, name, bases, members)
-
-        def __init__(cls, throw, away, members):
-            meta.__init__(cls, name, bases, members)
-            cls.__module__ = module
-            cls.__content_type__ = cls
-
-    class ContentType(object):
-        __metaclass__ = MetaType
-        __schema__ = schema
-        _property_factory = property_factory
-        _MappingNode = _MappingNode
-        _SequenceNode = _SequenceNode
-        _SequenceItem = _SequenceItem
-
-        @classmethod
-        def deserialize(cls, cstruct):
-            appstruct = cls.__schema__.deserialize(cstruct)
-            return cls(**appstruct)
-
-        def __init__(self, **kw):
-            try:
-                super(ContentType, self).__init__()
-            except TypeError:
-                # Substitute error message more pertinent to situation at hand.
-                raise TypeError(
-                    'Limone content types may only extend types with no-arg '
-                    'constructors.')
-
-            self.__content__ = self
-            kw = self._update_from_dict(kw, skip_missing=False)
-
-            if kw:
-                raise TypeError(
-                    "Unexpected keyword argument(s): %s" % repr(kw))
-
-        def deserialize_update(self, cstruct):
-            error = None
-            schema = self.__schema__
-            appstruct = {}
-            for i, (name, value) in enumerate(cstruct.items()):
-                node = schema[name]
-                try:
-                    appstruct[name] = node.deserialize(value)
-                except colander.Invalid, e:
-                    if error is None:
-                        error = colander.Invalid(schema)
-                    error.add(e, i)
-
-            if error is not None:
-                raise error
-
-            self._update_from_dict(appstruct, skip_missing=True)
-
-        def serialize(self):
-            return self.__schema__.serialize(self._appstruct())
-
-        def _update_from_dict(self, data, skip_missing):
-            error = None
-            schema = self.__schema__
-
-            for i, node in enumerate(schema.children):
-                name = node.name
-                try:
-                    value = data.pop(name, colander.null)
-                    if value is colander.null and skip_missing:
-                        continue
-                    setattr(self, name, value)
-                except colander.Invalid, e:
-                    if error is None:
-                        error = colander.Invalid(schema)
-                    error.add(e, i)
-
-            if error is not None:
-                raise error
-
-            return data
-
-        def _appstruct(self):
-            return [(node.name, _appstruct_node(getattr(self, node.name)))
-                    for node in self.__schema__]
-
-    property_factory = ContentType._property_factory
-    for node in schema:
-        setattr(ContentType, node.name, property_factory(ContentType, node))
-
-    return ContentType
-
-
 class _LeafNodeProperty(object):
 
     def __init__(self, content, node):
@@ -475,6 +323,158 @@ class PropertyFactory(object):
             prop_cls = registry.get(cls)
             if prop_cls is not None:
                 return prop_cls(content, node)
+
+
+property_factory = PropertyFactory()
+
+
+class _ContentSchemaDecorator(object):
+    """
+    Decorator for turning a Colander schema into a content type.
+    """
+    def __init__(self, meta=type, property_factory=property_factory):
+        self.meta = meta
+        self.property_factory = property_factory
+
+    def __call__(self, schema):
+        ct = make_content_type(
+            schema, schema.__name__, schema.__module__, meta=self.meta,
+            property_factory=self.property_factory
+        )
+        def callback(scanner, name, ob):
+            scanner.limone.register_content_type(ct)
+        venusian.attach(ct, callback, category='limone')
+        return ct
+
+
+content_schema = _ContentSchemaDecorator()
+
+
+class _ContentTypeDecorator(object):
+    """
+    Decorator for turning a class into a content type using the passed in
+    Colander schema.
+    """
+    def __init__(self, meta=type, property_factory=property_factory):
+        self.meta = meta
+        self.property_factory = property_factory
+
+    def __call__(self, schema):
+        def decorator(cls):
+            ct = make_content_type(
+                schema, cls.__name__, cls.__module__, (cls,), self.meta,
+                property_factory=self.property_factory
+            )
+            def callback(scanner, name, ob):
+                scanner.limone.register_content_type(ct)
+            venusian.attach(ct, callback, category='limone')
+            return ct
+        return decorator
+
+
+content_type = _ContentTypeDecorator()
+
+
+def make_content_type(schema, name, module=None, bases=(object,), meta=type,
+                      property_factory=property_factory):
+    """
+    Generate a content type class from a Colander schema.
+    """
+    if isinstance(schema, type):
+        schema = schema()
+
+    if type(getattr(schema, 'typ', None)) != colander.Mapping:
+        raise TypeError('Schema must be a colander mapping schema.')
+
+    class MetaType(meta):
+        def __new__(cls, throw, away, members):
+            return meta.__new__(cls, name, bases, members)
+
+        def __init__(cls, throw, away, members):
+            meta.__init__(cls, name, bases, members)
+            cls.__module__ = module
+            cls.__content_type__ = cls
+
+    class ContentType(object):
+        __metaclass__ = MetaType
+        __schema__ = schema
+        _property_factory = property_factory
+        _MappingNode = _MappingNode
+        _SequenceNode = _SequenceNode
+        _SequenceItem = _SequenceItem
+
+        @classmethod
+        def deserialize(cls, cstruct):
+            appstruct = cls.__schema__.deserialize(cstruct)
+            return cls(**appstruct)
+
+        def __init__(self, **kw):
+            try:
+                super(ContentType, self).__init__()
+            except TypeError:
+                # Substitute error message more pertinent to situation at hand.
+                raise TypeError(
+                    'Limone content types may only extend types with no-arg '
+                    'constructors.')
+
+            self.__content__ = self
+            kw = self._update_from_dict(kw, skip_missing=False)
+
+            if kw:
+                raise TypeError(
+                    "Unexpected keyword argument(s): %s" % repr(kw))
+
+        def deserialize_update(self, cstruct):
+            error = None
+            schema = self.__schema__
+            appstruct = {}
+            for i, (name, value) in enumerate(cstruct.items()):
+                node = schema[name]
+                try:
+                    appstruct[name] = node.deserialize(value)
+                except colander.Invalid, e:
+                    if error is None:
+                        error = colander.Invalid(schema)
+                    error.add(e, i)
+
+            if error is not None:
+                raise error
+
+            self._update_from_dict(appstruct, skip_missing=True)
+
+        def serialize(self):
+            return self.__schema__.serialize(self._appstruct())
+
+        def _update_from_dict(self, data, skip_missing):
+            error = None
+            schema = self.__schema__
+
+            for i, node in enumerate(schema.children):
+                name = node.name
+                try:
+                    value = data.pop(name, colander.null)
+                    if value is colander.null and skip_missing:
+                        continue
+                    setattr(self, name, value)
+                except colander.Invalid, e:
+                    if error is None:
+                        error = colander.Invalid(schema)
+                    error.add(e, i)
+
+            if error is not None:
+                raise error
+
+            return data
+
+        def _appstruct(self):
+            return [(node.name, _appstruct_node(getattr(self, node.name)))
+                    for node in self.__schema__]
+
+    property_factory = ContentType._property_factory
+    for node in schema:
+        setattr(ContentType, node.name, property_factory(ContentType, node))
+
+    return ContentType
 
 
 def _appstruct_node(value):
