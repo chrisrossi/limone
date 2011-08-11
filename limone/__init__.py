@@ -101,7 +101,8 @@ class _ContentTypeDecorator(object):
 content_type = _ContentTypeDecorator()
 
 
-def make_content_type(schema, name, module=None, bases=(object,), meta=type):
+def make_content_type(schema, name, module=None, bases=(object,), meta=type,
+                      property_factory=None):
     """
     Generate a content type class from a Colander schema.
     """
@@ -110,6 +111,9 @@ def make_content_type(schema, name, module=None, bases=(object,), meta=type):
 
     if type(getattr(schema, 'typ', None)) != colander.Mapping:
         raise TypeError('Schema must be a colander mapping schema.')
+
+    if property_factory is None:
+        property_factory = PropertyFactory()
 
     class MetaType(meta):
         def __new__(cls, throw, away, members):
@@ -123,6 +127,7 @@ def make_content_type(schema, name, module=None, bases=(object,), meta=type):
     class ContentType(object):
         __metaclass__ = MetaType
         __schema__ = schema
+        _property_factory = property_factory
         _MappingNode = _MappingNode
         _SequenceNode = _SequenceNode
         _SequenceItem = _SequenceItem
@@ -193,15 +198,16 @@ def make_content_type(schema, name, module=None, bases=(object,), meta=type):
             return [(node.name, _appstruct_node(getattr(self, node.name)))
                     for node in self.__schema__]
 
+    property_factory = ContentType._property_factory
     for node in schema:
-        setattr(ContentType, node.name, _make_property(ContentType, node))
+        setattr(ContentType, node.name, property_factory(ContentType, node))
 
     return ContentType
 
 
 class _LeafNodeProperty(object):
 
-    def __init__(self, node):
+    def __init__(self, content_type, node):
         self.node = node
         name = node.name
         assert name
@@ -238,9 +244,10 @@ class _MappingNode(object):
         props = {}
         error = None
         data = appstruct.copy()
+        property_factory = content_type._property_factory
         for i, node in enumerate(schema):
             name = node.name
-            props[name] = prop = _make_property(content_type, node)
+            props[name] = prop = property_factory(content_type, node)
             try:
                 prop.__set__(self, data.pop(name, colander.null))
             except colander.Invalid, e:
@@ -293,7 +300,8 @@ class _SequenceNode(object):
         self.__content_type__ = content_type
         schema.typ._validate(schema, appstruct, schema.typ.accept_scalar)
         self.__schema__ = schema
-        self._prop = prop = _make_property(content_type, schema.children[0])
+        property_factory = content_type._property_factory
+        self._prop = prop = property_factory(content_type, schema.children[0])
 
         data = self._data_type()
         error = None
@@ -422,8 +430,9 @@ class _SequenceItem(object):
 class _TupleNodeProperty(_LeafNodeProperty):
 
     def __init__(self, content_type, node):
-        super(_TupleNodeProperty, self).__init__(node)
-        self._props = tuple(_make_property(content_type, child)
+        super(_TupleNodeProperty, self).__init__(content_type, node)
+        property_factory = content_type._property_factory
+        self._props = tuple(property_factory(content_type, child)
                             for child in node)
 
     def _validate(self, content_type, value):
@@ -446,15 +455,22 @@ class _TupleNodeProperty(_LeafNodeProperty):
         return tuple(item.get() for item in items)
 
 
-def _make_property(content_type, node):
-    type = node.typ
-    if isinstance(type, colander.Mapping):
-        return _MappingNodeProperty(node)
-    if isinstance(type, colander.Sequence):
-        return _SequenceNodeProperty(node)
-    if isinstance(type, colander.Tuple):
-        return _TupleNodeProperty(content_type, node)
-    return _LeafNodeProperty(node)
+class PropertyFactory(object):
+
+    def __init__(self):
+        self.registry = {
+            colander.Mapping: _MappingNodeProperty,
+            colander.Sequence: _SequenceNodeProperty,
+            colander.Tuple: _TupleNodeProperty,
+            colander.SchemaType: _LeafNodeProperty,
+        }
+
+    def __call__(self, content_type, node):
+        registry = self.registry
+        for cls in type(node.typ).mro():
+            prop_cls = registry.get(cls)
+            if prop_cls is not None:
+                return prop_cls(content_type, node)
 
 
 def _appstruct_node(value):

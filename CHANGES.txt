@@ -8,6 +8,9 @@ Unreleased
   to set the underlying attribute.  This is done for the benefit of extensions
   that rely on __setattr__ being called, such as `limone_zodb`.
 
+- Use an overridable property factory for generating property descriptors for
+  attributes of content types.
+
 0.1a2 (2011-07-16)
 ++++++++++++++++++
 
