@@ -64,12 +64,15 @@ class _ContentSchemaDecorator(object):
     """
     Decorator for turning a Colander schema into a content type.
     """
-    def __init__(self, meta=type):
+    def __init__(self, meta=type, property_factory=None):
         self.meta = meta
+        self.property_factory = property_factory
 
     def __call__(self, schema):
         ct = make_content_type(
-            schema, schema.__name__, schema.__module__, meta=self.meta)
+            schema, schema.__name__, schema.__module__, meta=self.meta,
+            property_factory=self.property_factory
+        )
         def callback(scanner, name, ob):
             scanner.limone.register_content_type(ct)
         venusian.attach(ct, callback, category='limone')
@@ -84,13 +87,16 @@ class _ContentTypeDecorator(object):
     Decorator for turning a class into a content type using the passed in
     Colander schema.
     """
-    def __init__(self, meta=type):
+    def __init__(self, meta=type, property_factory=None):
         self.meta = meta
+        self.property_factory = property_factory
 
     def __call__(self, schema):
         def decorator(cls):
             ct = make_content_type(
-                schema, cls.__name__, cls.__module__, (cls,), self.meta)
+                schema, cls.__name__, cls.__module__, (cls,), self.meta,
+                property_factory=self.property_factory
+            )
             def callback(scanner, name, ob):
                 scanner.limone.register_content_type(ct)
             venusian.attach(ct, callback, category='limone')
