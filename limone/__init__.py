@@ -313,7 +313,6 @@ class _SequenceNode(object):
 
         data = self._data_type()
         error = None
-        content = self.__content__
         for i, item in enumerate(appstruct):
             try:
                 data.append(content._SequenceItem(content, prop, item))
