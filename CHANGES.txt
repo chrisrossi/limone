@@ -1,8 +1,8 @@
 Changelog for Limone
 --------------------
 
-Unreleased
-++++++++++
+0.1a4 (2011-08-11)
+++++++++++++++++++
 
 - Make sure that a property of a _MappingNode is set that __setattr__ is used
   to set the underlying attribute.  This is done for the benefit of extensions
@@ -10,6 +10,9 @@ Unreleased
 
 - Use an overridable property factory for generating property descriptors for
   attributes of content types.
+
+0.1a3 (2011-08-09)
+++++++++++++++++++
 
 - Refactor such that every node contained by a content object has a reference
   to the content object.
