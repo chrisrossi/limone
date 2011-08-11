@@ -11,6 +11,9 @@ Unreleased
 - Use an overridable property factory for generating property descriptors for
   attributes of content types.
 
+- Refactor such that every node contained by a content object has a reference
+  to the content object.
+
 0.1a2 (2011-07-16)
 ++++++++++++++++++
 

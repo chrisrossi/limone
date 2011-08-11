@@ -146,6 +146,7 @@ def make_content_type(schema, name, module=None, bases=(object,), meta=type,
                     'Limone content types may only extend types with no-arg '
                     'constructors.')
 
+            self.__content__ = self
             kw = self._update_from_dict(kw, skip_missing=False)
 
             if kw:
@@ -207,7 +208,7 @@ def make_content_type(schema, name, module=None, bases=(object,), meta=type,
 
 class _LeafNodeProperty(object):
 
-    def __init__(self, content_type, node):
+    def __init__(self, content, node):
         self.node = node
         name = node.name
         assert name
@@ -217,11 +218,11 @@ class _LeafNodeProperty(object):
         return obj.__dict__[self._attr]
 
     def __set__(self, obj, value):
-        value = self._validate(obj.__content_type__, value)
+        value = self._validate(obj.__content__, value)
         setattr(obj, self._attr, value)
         return value
 
-    def _validate(self, content_type, value):
+    def _validate(self, content, value):
         # serialize/deserialize forces colander to validate
         # also will replace null values with defaults
         node = self.node
@@ -230,24 +231,24 @@ class _LeafNodeProperty(object):
 
 class _MappingNodeProperty(_LeafNodeProperty):
 
-    def _validate(self, content_type, value):
+    def _validate(self, content, value):
         if value is colander.null:
             value = {}
-        return content_type._MappingNode(content_type, self.node, value)
+        return content._MappingNode(content, self.node, value)
 
 
 class _MappingNode(object):
 
-    def __init__(self, content_type, schema, appstruct):
-        self.__dict__['__content_type__'] = content_type
+    def __init__(self, content, schema, appstruct):
+        self.__dict__['__content__'] = content
         schema.typ._validate(schema, appstruct) # XXX private colander api
         props = {}
         error = None
         data = appstruct.copy()
-        property_factory = content_type._property_factory
+        property_factory = content._property_factory
         for i, node in enumerate(schema):
             name = node.name
-            props[name] = prop = property_factory(content_type, node)
+            props[name] = prop = property_factory(content, node)
             try:
                 prop.__set__(self, data.pop(name, colander.null))
             except colander.Invalid, e:
@@ -286,30 +287,29 @@ class _MappingNode(object):
 
 class _SequenceNodeProperty(_LeafNodeProperty):
 
-    def _validate(self, content_type, value):
+    def _validate(self, content, value):
         if value is colander.null:
             value = []
-        return content_type._SequenceNode(content_type, self.node, value)
+        return content._SequenceNode(content, self.node, value)
 
 
 class _SequenceNode(object):
     _data_type = list
 
-    def __init__(self, content_type, schema, appstruct):
+    def __init__(self, content, schema, appstruct):
         # XXX calls private colander api.
-        self.__content_type__ = content_type
+        self.__content__ = content
         schema.typ._validate(schema, appstruct, schema.typ.accept_scalar)
         self.__schema__ = schema
-        property_factory = content_type._property_factory
-        self._prop = prop = property_factory(content_type, schema.children[0])
+        property_factory = content._property_factory
+        self._prop = prop = property_factory(content, schema.children[0])
 
         data = self._data_type()
         error = None
-        content_type = self.__content_type__
+        content = self.__content__
         for i, item in enumerate(appstruct):
             try:
-                data.append(content_type._SequenceItem(
-                    content_type, prop, item))
+                data.append(content._SequenceItem(content, prop, item))
             except colander.Invalid, e:
                 if error is None:
                     error = colander.Invalid(schema)
@@ -324,9 +324,8 @@ class _SequenceNode(object):
         return self._data[index].get()
 
     def __setitem__(self, index, value):
-        content_type = self.__content_type__
-        self._data[index] = content_type._SequenceItem(
-            content_type, self._prop, value)
+        content = self.__content__
+        self._data[index] = content._SequenceItem(content, self._prop, value)
 
     def __delitem__(self, index):
         del self._data[index]
@@ -342,16 +341,16 @@ class _SequenceNode(object):
         return repr(list(self))
 
     def append(self, item):
-        content_type = self.__content_type__
+        content = self.__content__
         self._data.append(
-            content_type._SequenceItem(content_type, self._prop, item))
+            content._SequenceItem(content, self._prop, item))
 
     def extend(self, items):
         prop = self._prop
         data = self._data
-        content_type = self.__content_type__
+        content = self.__content__
         for item in items:
-            data.append(content_type._SequenceItem(content_type, prop, item))
+            data.append(content._SequenceItem(content, prop, item))
 
     def count(self, item):
         n = 0
@@ -374,9 +373,9 @@ class _SequenceNode(object):
         return len(self._data)
 
     def insert(self, index, item):
-        content_type = self.__content_type__
-        self._data.insert(index, content_type._SequenceItem(
-            content_type, self._prop, item))
+        content = self.__content__
+        self._data.insert(index, content._SequenceItem(
+            content, self._prop, item))
 
     def pop(self, index=-1):
         return self._data.pop(index).get()
@@ -394,11 +393,11 @@ class _SequenceNode(object):
         error = None
         items = []
         prop = self._prop
-        content_type = self.__content_type__
+        content = self.__content__
         for index, item in enumerate(s):
             try:
                 items.append(
-                    content_type._SequenceItem(content_type, prop, item))
+                    content._SequenceItem(content, prop, item))
             except colander.Invalid, e:
                 if error is None:
                     error = colander.Invalid(self.__schema__)
@@ -418,8 +417,8 @@ class _SequenceNode(object):
 
 class _SequenceItem(object):
 
-    def __init__(self, content_type, prop, value):
-        self.__content_type__ = content_type
+    def __init__(self, content, prop, value):
+        self.__content__ = content
         self._prop = prop
         prop.__set__(self, value)
 
@@ -429,13 +428,12 @@ class _SequenceItem(object):
 
 class _TupleNodeProperty(_LeafNodeProperty):
 
-    def __init__(self, content_type, node):
-        super(_TupleNodeProperty, self).__init__(content_type, node)
-        property_factory = content_type._property_factory
-        self._props = tuple(property_factory(content_type, child)
-                            for child in node)
+    def __init__(self, content, node):
+        super(_TupleNodeProperty, self).__init__(content, node)
+        property_factory = content._property_factory
+        self._props = tuple(property_factory(content, child) for child in node)
 
-    def _validate(self, content_type, value):
+    def _validate(self, content, value):
         node = self.node
         node.typ._validate(node, value) # XXX private colander api
         items = []
@@ -443,7 +441,7 @@ class _TupleNodeProperty(_LeafNodeProperty):
         for i, (item, prop) in enumerate(zip(value, self._props)):
             try:
                 items.append(
-                    content_type._SequenceItem(content_type, prop, item))
+                    content._SequenceItem(content, prop, item))
             except colander.Invalid, e:
                 if error is None:
                     error = colander.Invalid(node)
@@ -465,12 +463,12 @@ class PropertyFactory(object):
             colander.SchemaType: _LeafNodeProperty,
         }
 
-    def __call__(self, content_type, node):
+    def __call__(self, content, node):
         registry = self.registry
         for cls in type(node.typ).mro():
             prop_cls = registry.get(cls)
             if prop_cls is not None:
-                return prop_cls(content_type, node)
+                return prop_cls(content, node)
 
 
 def _appstruct_node(value):
