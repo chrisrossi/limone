@@ -286,7 +286,7 @@ Produces this output::
      'name': u'Jack',
      'phones': [{'location': u'home', 'number': u'555-1212'}]}
 
-A new instance can be created from an appstruct:
+A new instance can be created from an appstruct::
 
     jack = Person.from_appstruct(
         {'age': 52,
@@ -294,7 +294,7 @@ A new instance can be created from an appstruct:
          'name': u'Jack',
          'phones': [{'location': u'home', 'number': u'555-1212'}]})
 
-A partial appstruct may be used to update an instance:
+A partial appstruct may be used to update an instance::
 
     jack.update_from_appstruct({'age': 53})
 
