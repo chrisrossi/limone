@@ -134,7 +134,7 @@ class ShallowSchemaTests(unittest2.TestCase):
 
     def test_update_from_appstruct(self):
         joe = self.content_type(name='Joe', age=35)
-        joe.deserialize_update({'age': 40, 'name': 'Gio'})
+        joe.update_from_appstruct({'age': 40, 'name': 'Gio'})
         self.assertEqual(joe.name, 'Gio')
         self.assertEqual(joe.age, 40)
         joe.deserialize_update({'age': 41})

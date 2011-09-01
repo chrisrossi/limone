@@ -446,6 +446,9 @@ def make_content_type(schema, name, module=None, bases=(object,), meta=type,
 
             self._update_from_dict(appstruct, skip_missing=True)
 
+        def update_from_appstruct(self, appstruct):
+            self._update_from_dict(appstruct, skip_missing=True)
+
         def serialize(self):
             return self.__schema__.serialize(self.appstruct())
 
