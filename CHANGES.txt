@@ -1,8 +1,8 @@
 Changelog for Limone
 --------------------
 
-Unreleased
-----------
+0.1a5 (2011-09-01)
+------------------
 
 - Added public API for converting instances to and from Colander appstructs.
 
