@@ -135,9 +135,9 @@ class _MappingNode(object):
                 return prop.__set__(self, value)
         return super(_MappingNode, self).__setattr__(name, value)
 
-    def _appstruct(self):
-        return [(name, _appstruct_node(prop.__get__(self))) for
-                name, prop in self._props.items()]
+    def appstruct(self):
+        return dict([(name, _appstruct_node(prop.__get__(self))) for
+                     name, prop in self._props.items()])
 
 
 class _SequenceNodeProperty(_LeafNodeProperty):
@@ -265,7 +265,7 @@ class _SequenceNode(object):
     def __delslice__(self, i, j):
         del self._data[i:j]
 
-    def _appstruct(self):
+    def appstruct(self):
         return [_appstruct_node(item) for item in self]
 
 
@@ -408,6 +408,10 @@ def make_content_type(schema, name, module=None, bases=(object,), meta=type,
             appstruct = cls.__schema__.deserialize(cstruct)
             return cls(**appstruct)
 
+        @classmethod
+        def from_appstruct(cls, appstruct):
+            return cls(**appstruct)
+
         def __init__(self, **kw):
             try:
                 super(ContentType, self).__init__()
@@ -443,7 +447,7 @@ def make_content_type(schema, name, module=None, bases=(object,), meta=type,
             self._update_from_dict(appstruct, skip_missing=True)
 
         def serialize(self):
-            return self.__schema__.serialize(self._appstruct())
+            return self.__schema__.serialize(self.appstruct())
 
         def _update_from_dict(self, data, skip_missing):
             error = None
@@ -466,9 +470,9 @@ def make_content_type(schema, name, module=None, bases=(object,), meta=type,
 
             return data
 
-        def _appstruct(self):
-            return [(node.name, _appstruct_node(getattr(self, node.name)))
-                    for node in self.__schema__]
+        def appstruct(self):
+            return dict([(node.name, _appstruct_node(getattr(self, node.name)))
+                         for node in self.__schema__])
 
     property_factory = ContentType._property_factory
     for node in schema:
@@ -478,7 +482,7 @@ def make_content_type(schema, name, module=None, bases=(object,), meta=type,
 
 
 def _appstruct_node(value):
-    get_appstruct = getattr(value, '_appstruct', None)
+    get_appstruct = getattr(value, 'appstruct', None)
     if get_appstruct is not None:
         return get_appstruct()
     return value

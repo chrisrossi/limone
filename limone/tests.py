@@ -110,8 +110,17 @@ class ShallowSchemaTests(unittest2.TestCase):
         joe = self.content_type(name='Joe', age=35)
         self.assertEqual(joe.serialize(), {'age': '35', 'name': 'Joe'})
 
+    def test_appstruct(self):
+        joe = self.content_type(name='Joe', age=35)
+        self.assertEqual(joe.appstruct(), {'age': 35, 'name': 'Joe'})
+
     def test_deserialize(self):
         joe = self.content_type.deserialize({'age': '35', 'name': 'Joe'})
+        self.assertEqual(joe.name, 'Joe')
+        self.assertEqual(joe.age, 35)
+
+    def test_from_appstruct(self):
+        joe = self.content_type.from_appstruct({'age': 35, 'name': 'Joe'})
         self.assertEqual(joe.name, 'Joe')
         self.assertEqual(joe.age, 35)
 
@@ -121,6 +130,14 @@ class ShallowSchemaTests(unittest2.TestCase):
         self.assertEqual(joe.name, 'Gio')
         self.assertEqual(joe.age, 40)
         joe.deserialize_update({'age': '41'})
+        self.assertEqual(joe.age, 41)
+
+    def test_update_from_appstruct(self):
+        joe = self.content_type(name='Joe', age=35)
+        joe.deserialize_update({'age': 40, 'name': 'Gio'})
+        self.assertEqual(joe.name, 'Gio')
+        self.assertEqual(joe.age, 40)
+        joe.deserialize_update({'age': 41})
         self.assertEqual(joe.age, 41)
 
     def test_deserialize_update_invalid(self):
@@ -321,6 +338,21 @@ class NestedMappingNodeTests(unittest2.TestCase):
             },
         })
 
+    def test_appstruct(self):
+        from datetime import date
+        jack = self.test_construction()
+        self.assertEquals(jack.appstruct(), {
+            'name': 'Jack',
+            'age': 500,
+            'personal': {
+                'nsa_data': {
+                    'serialnum': 'abc123',
+                    'date_of_contact': date(2010, 5, 12),
+                },
+                'n_arrests': 5,
+            },
+        })
+
     def test_deserialize(self):
         from datetime import date
         jonas = self.content_type.deserialize({
@@ -332,6 +364,26 @@ class NestedMappingNodeTests(unittest2.TestCase):
                     'date_of_contact': '2011-05-12',
                 },
                 'n_arrests': '6',
+            },
+        })
+        self.assertEqual(jonas.name, 'Jonas')
+        self.assertEqual(jonas.age, 50)
+        self.assertEqual(jonas.personal.nsa_data.serialnum, 'a1')
+        self.assertEqual(jonas.personal.nsa_data.date_of_contact,
+                         date(2011, 5, 12))
+        self.assertEqual(jonas.personal.n_arrests, 6)
+
+    def test_from_appstruct(self):
+        from datetime import date
+        jonas = self.content_type.from_appstruct({
+            'name': 'Jonas',
+            'age': 50,
+            'personal': {
+                'nsa_data': {
+                    'serialnum': 'a1',
+                    'date_of_contact': date(2011, 5, 12),
+                },
+                'n_arrests': 6,
             },
         })
         self.assertEqual(jonas.name, 'Jonas')
@@ -431,6 +483,13 @@ class NestedSequenceNodeTests(unittest2.TestCase):
         plane = self.test_construction()
         self.assertEqual(plane.serialize(), {
             'coords': [['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9']],
+            'id': 'plane'
+        })
+
+    def test_appstruct(self):
+        plane = self.test_construction()
+        self.assertEqual(plane.appstruct(), {
+            'coords': [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
             'id': 'plane'
         })
 
@@ -614,6 +673,13 @@ class ColanderExampleTests(unittest2.TestCase):
         self.assertEqual(self.make_one().serialize(), {
             'age': '52',
             'friends': [('1', u'Fred'), ('2', u'Barney')],
+            'name': u'Jack',
+            'phones': [{'location': u'home', 'number': u'555-1212'}]})
+
+    def test_appstruct(self):
+        self.assertEqual(self.make_one().appstruct(), {
+            'age': 52,
+            'friends': [(1, u'Fred'), (2, u'Barney')],
             'name': u'Jack',
             'phones': [{'location': u'home', 'number': u'555-1212'}]})
 

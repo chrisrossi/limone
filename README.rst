@@ -258,6 +258,45 @@ each instance so that each instance only tries to find its own content types.
 The `unhook_import` method cleans up a previously made import hook, returning
 `sys.meta_path` to its previous state.
 
+Using the Colander Appstruct
+----------------------------
+
+Instances of a content type can be converted to their Colander appstruct
+representations::
+
+    jack = Person(
+        name='Jack',
+        age=52,
+        friends=[
+            (1, 'Fred'),
+            (2, 'Barney')
+        ],
+        phones=[
+            {'location': 'home',
+             'number': '555-1212'},
+        ])
+
+    from pprint import pprint
+    pprint(jack.appstuct())
+
+Produces this output::
+
+    {'age': 52,
+     'friends': [(1, u'Fred'), (2, u'Barney')],
+     'name': u'Jack',
+     'phones': [{'location': u'home', 'number': u'555-1212'}]}
+
+A new instance can be created from an appstruct:
+
+    jack = Person.from_appstruct(
+        {'age': 52,
+         'friends': [(1, u'Fred'), (2, u'Barney')],
+         'name': u'Jack',
+         'phones': [{'location': u'home', 'number': u'555-1212'}]})
+
+A partial appstruct may be used to update an instance:
+
+    jack.update_from_appstruct({'age': 53})
 
 Using Colander`s Serialization/Deserialization
 ----------------------------------------------
